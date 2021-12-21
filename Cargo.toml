@@ -1,0 +1,10 @@
+[package]
+name = "offsetcalculator"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lut99"]
+
+[workspace]
+
+[dependencies]
+parse-args = { version="0.1.0", path="crates/args" }
