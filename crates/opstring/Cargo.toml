@@ -1,9 +1,8 @@
 [package]
-name = "parse-args"
+name = "opstring"
 version = "0.1.0"
 edition = "2021"
 authors = ["Lut99"]
 
 [dependencies]
 unicode-segmentation = { version = "1.8.0" }
-opstring = { version="0.1.0", path="../opstring" }
