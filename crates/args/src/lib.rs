@@ -4,7 +4,7 @@
  * Created:
  *   21 Dec 2021, 16:21:49
  * Last edited:
- *   22 Dec 2021, 17:28:08
+ *   28 Dec 2021, 12:59:48
  * Auto updated?
  *   Yes
  *
@@ -13,13 +13,13 @@
  *   arguments.
 **/
 
-// Make the normal HashMap easily available
 use std::collections::HashMap;
+use opstring::OpString;
 
 
 /***** CUSTOM TYPES *****/
 /// Defines a shortcut for the Positional's HashMap in the ArgsDict.
-type PositionalHashMap = HashMap<String, (u32, String)>;
+type PositionalHashMap = HashMap<String, (usize, String)>;
 /// Defines a shortcut for the Option's HashMap in the ArgsDict.
 type OptionHashMap = HashMap<String, (String, String, Vec<String>)>;
 
@@ -49,11 +49,9 @@ pub const HELP_DESCRIPTION: &str = "Shows this list of arguments, then quits.";
 ///  * `'a`: The lifetime parameter for the WorldIterator, which should be itself.
 struct WordIterator<'a> {
     /// The string we iterate over
-    s    : &'a str,
+    s    : OpString<'a>,
     /// The current position in the string
     i    : usize,
-    /// The iterator over the internal string
-    iter : unicode_segmentation::Graphemes<'a>,
 }
 
 impl<'a> WordIterator<'a> {
@@ -61,9 +59,8 @@ impl<'a> WordIterator<'a> {
     fn new(s: &'a str) -> WordIterator {
         // Return the new WordIterator
         return WordIterator {
-            s    : s,
-            i    : 0,
-            iter : unicode_segmentation::UnicodeSegmentation::graphemes(s, true)
+            s    : OpString::new(s),
+            i    : 0
         };
     }
 }
@@ -82,24 +79,17 @@ impl<'a> Iterator for WordIterator<'a> {
         let start_i = self.i;
         loop {
             // Get the next char
-            let g = self.iter.next();
             let c: &str;
-            if g == None {
-                // If we didn't parse nothing yet, then we have reached end-of-string for sure
-                if start_i == self.i { return None; }
-                // Otherwise, note we reached it now
-                c = "\0";
-            } else {
-                // Not the end yet
-                c = g.unwrap();
-            }
+            if self.i < self.s.len() { c = self.s[self.i]; }
+            else { c = "\0"; }
 
             // See if it's a separator
             if c.eq(" ") || c.eq("\n") || c.eq("\t") || c.eq("\r") || c.eq("\0") {
                 // It is; return the result + the separator
-                let end_i = self.i;
+                let start_j = self.s.translate_opstr(start_i);
+                let end_j   = self.s.translate_opstr(self.i);
                 self.i += c.len();
-                return Some((&self.s[start_i..end_i], c));
+                return Some((&self.s.parent()[start_j..end_j], c));
             }
 
             // Otherwise, move the internal i
@@ -118,7 +108,7 @@ struct Positional {
     /// The uid for this positional.
     uid         : String,
     /// The index of this positional.
-    index       : u32,
+    index       : usize,
     /// The human-readable name for this positional. Used in the usage/help string.
     name        : String,
     /// The description for this positional.
@@ -134,9 +124,9 @@ struct Option {
     /// The longname for this option.
     longname          : String,
     /// The minimum number of values for this option.
-    min_n_values      : u32,
+    min_n_values      : usize,
     /// The maximum number of values for this option.
-    max_n_values      : u32,
+    max_n_values      : usize,
     /// The description of the parameters for this option.
     param_description : String,
     /// The description for this option.
@@ -181,25 +171,31 @@ impl ArgParser {
     ///  * `args`: The list of arguments to parse from.
     ///  * `i`: Reference to the current position within args. Will be increment as we parse, and is left at the last-parsed argument.
     ///  * `max_n`: The maximum number of arguments to parse.
-    ///  * `parse_opts`: Whether or not options are still allowed to be parsed.
+    ///  * `parse_opts`: Whether or not options are still allowed to be parsed. Might be adapted if we have use_double_dash set and we encounter it.
+    ///  * `use_double_dash`: Whether or not the function should look out for the double dash, option-disabling arg.
     /// **Returns**  
     /// The popped arguments, of which there will be at most max_n.
-    fn parse_values(args: &Vec<String>, i: &mut usize, max_n: u32, parse_opts: bool) -> Vec<String> {
+    fn parse_values(args: &Vec<String>, i: &mut usize, max_n: usize, parse_opts: &mut bool, use_double_dash: bool) -> Vec<String> {
         // Increment i to skip the option itself
         *i += 1;
+        let start_i = *i;
 
         // Try to pop
         let mut result: Vec<String> = Vec::new();
-        while *i < args.len() && *i < max_n as usize {
+        while *i < args.len() && *i - start_i < max_n {
             // Get the argument
             let arg = &args[*i];
-
-            // If it's empty, skip; otherwise, get the first char
-            if arg.len() == 0 { continue; }
-            let first_char: char = arg.chars().next().unwrap();
+            let sarg = OpString::new(arg);
+            if sarg.len() == 0 { continue; }
 
             // If it's an option, stop
-            if parse_opts && first_char == '-' {
+            if *parse_opts && sarg[0].eq("-") {
+                // Make sure its not the other one
+                if use_double_dash && sarg.len() == 2 && sarg[1].eq("-") {
+                    *parse_opts = false;
+                    *i += 1;
+                    continue;
+                }
                 break;
             }
 
@@ -210,7 +206,7 @@ impl ArgParser {
             *i += 1;
         }
 
-        // i is now at the first unparseable thing; fix this
+        // i is now at the first unparseable thing; fix this for the main increment
         *i -= 1;
 
         // Return the result struct
@@ -340,7 +336,7 @@ impl ArgParser {
         // Create a new Positional argument
         let result = Positional {
             uid: String::from(uid),
-            index: self.positionals.len() as u32,
+            index: self.positionals.len(),
             name: String::from(name),
             description: String::from(description)
         };
@@ -359,7 +355,7 @@ impl ArgParser {
     ///  * `max_n_values`: The maximum number of values for this option. If it's a flag, pass no argument (0). Cannot be smaller than `min_n_values`.
     ///  * `param_description`: A string description of the parameters of this option. Will most likely be a list of types or something.
     ///  * `description`: A string description of the option.
-    pub fn add_opt(&mut self, uid: &str, shortname: &str, longname: &str, min_n_values: u32, max_n_values: u32, param_description: &str, description: &str) {
+    pub fn add_opt(&mut self, uid: &str, shortname: &str, longname: &str, min_n_values: usize, max_n_values: usize, param_description: &str, description: &str) {
         // Check if the shortname is valid
         if unicode_segmentation::UnicodeSegmentation::graphemes(shortname, true).collect::<Vec<&str>>().len() > 1 {
             panic!("A shortlabel cannot have more than one character: {} > 1.", shortname.len());
@@ -617,163 +613,150 @@ impl ArgParser {
         while i < args.len() {
             // Get the argument and its iterator
             let arg = &args[i];
-            if arg.len() == 0 { continue; }
-            let mut arg_chars = unicode_segmentation::UnicodeSegmentation::graphemes(arg.as_str(), true);
+            let sarg = OpString::new(arg);
+            if sarg.len() == 0 { continue; }
 
-            // Get the first character
-            let first_char: &str = arg_chars.next().unwrap();
-
-            // If the argument starts with a dash, parse it as an option (as long as that's allowed)
-            if parse_options && first_char.eq("-") {
-                // Throw errors if nothing follows
-                if arg.len() == 1 {
-                    result.errors.push(String::from("Missing option name after '-'."));
+            // First, split on option or not
+            if parse_options && sarg[0].eq("-") {
+                // It's an option
+                if sarg.len() == 1 {
+                    result.errors.push(String::from("Missing character after '-'."));
                     i += 1;
                     continue;
                 }
 
-                // Get the second character
-                let second_char: &str = arg_chars.next().unwrap();
-
-                // If it's the dash and we treat is specially, then treat is special
-                if self.use_double_dash && second_char.eq("-") {
+                // If it's the double dash case, then stop parsing double values
+                if self.use_double_dash && sarg.len() == 2 && sarg[1].eq("-") {
                     parse_options = false;
                     i += 1;
                     continue;
                 }
 
-                // Otherwise, split into shortname or longname search
-                if !second_char.eq("-") {
-                    // Shortname
+                // Check if single dash or double dash
+                if !sarg[1].eq("-") || (!self.use_double_dash && sarg.len() == 2) {
+                    // Single dash; shortoption
+                    let mut found = false;
+                    let mut error = false;
+                    for o in self.options.iter() {
+                        if o.shortname.eq(sarg[1]) {
+                            // It's a match!
 
-                    // Search through the options to find a match
-                    let mut status = 0;
-                    for opt in self.options.iter() {
-                        if opt.shortname.eq(second_char) {
-                            // First, get the current list of values (if any)
-                            let mut new_values = Vec::new();
-                            let opt_values: &mut Vec<String>;
-                            if result.options.contains_key(&opt.uid) {
-                                opt_values = &mut result.options.get_mut(&opt.uid).unwrap().2;
-                            } else {
-                                opt_values = &mut new_values;
-                            }
-
-                            // It matches; see if we need to parse values
-                            if arg.len() > 2 {
-                                // It could be directly following the option itself
-                                if opt.max_n_values == 1 {
-                                    // Make sure we didn't already see one
-                                    if opt_values.len() + 1 > opt.max_n_values as usize {
-                                        result.errors.push(String::from(format!("Too many values given for '-{}': expected {}, got {}.", opt.shortname, opt.max_n_values, opt_values.len() + 1)));
-                                        status = -1;
-                                        break;
-                                    }
-
-                                    // It is; add the value
-                                    opt_values.push(String::from(&arg[2..]));
-                                } else {
-                                    // Wtf is this
-                                    result.errors.push(String::from(format!("Got value directly after '-{}', which is only supported for options with at most 1 value.", opt.shortname)));
-                                    status = -1;
+                            // Make sure it's legal
+                            if sarg.len() > 2 {
+                                if o.max_n_values == 0 {
+                                    // No values at all supported
+                                    result.errors.push(format!("Option '-{}' cannot accept values (is passed '{}').", o.shortname, &arg[sarg.translate_opstr(2)..]));
+                                    error = true;
+                                    break;
+                                } else if o.max_n_values > 1 {
+                                    // More values supported
+                                    result.errors.push(format!("Passing a value immediately after an option is only supported for options with at most 1 value ('-{}' has at most {}).", o.shortname, o.max_n_values));
+                                    error = true;
                                     break;
                                 }
-                            } else if opt.max_n_values > 0 {
-                                // Search for the values and add them to the list
-                                let mut values = ArgParser::parse_values(&args, &mut i, opt.max_n_values - opt_values.len() as u32, parse_options);
-                                opt_values.append(&mut values);
                             }
 
-                            // Insert it with the new values if we hadn't already
-                            if !result.options.contains_key(&opt.uid) {
-                                result.options.insert(opt.uid.clone(), (opt.shortname.clone(), opt.longname.clone(), new_values));
+                            // Now make sure the option is defined
+                            if !result.options.contains_key(&o.uid) {
+                                result.options.insert(o.uid.clone(), (o.shortname.clone(), o.longname.clone(), Vec::new()));
+                            }
+                            let values = &mut result.options.get_mut(&o.uid).unwrap().2;
+                            
+                            // Add the values as needed
+                            if sarg.len() > 2 {
+                                // We know that the number of arguments make sense, so add the rest as a value
+                                values.push(String::from(&arg[sarg.translate_opstr(2)..]));
+
+                            } else if o.max_n_values > 0 {
+                                // Parse the rest of the arguments as values
+                                let mut new_values = ArgParser::parse_values(args, &mut i, o.max_n_values, &mut parse_options, self.use_double_dash);
+                                values.append(&mut new_values);
+
                             }
 
-                            // Quit searching
-                            status = 1;
+                            // We're done
+                            found = true;
                             break;
                         }
                     }
-                    if status != 1 {
-                        if status == 0 { result.errors.push(String::from(format!("Unknown option '{}'{}", arg, if self.use_help { format!("; type '--{}' to see a list of options.", HELP_LONGNAME) } else { String::new() }))); }
+
+                    // If not found, throw an error
+                    if !found {
+                        if !error { result.errors.push(format!("Unknown option '{}'{}", arg, if self.use_help { "; use '--help' to see an overview of accepted options." } else { "" })); }
                         i += 1;
                         continue;
                     }
+
                 } else {
-                    // Longname
+                    // Double dash; use longoption
+                    let mut found = false;
+                    let mut error = false;
+                    let larg = &arg[sarg.translate_opstr(2)..];
+                    for o in self.options.iter() {
+                        if o.longname.eq(&larg[..o.longname.len()]) {
+                            // It's a match!
 
-                    // Search through the options to find a match
-                    let mut status = 0;
-                    for opt in self.options.iter() {
-                        if arg[2..2 + opt.longname.len()].eq(&opt.longname) && (arg.len() <= 2 + opt.longname.len() || arg.chars().nth(2 + opt.longname.len()).unwrap() == '=') {
-                            // First, get the current list of values (if any)
-                            let mut new_values = Vec::new();
-                            let opt_values: &mut Vec<String>;
-                            if result.options.contains_key(&opt.uid) {
-                                opt_values = &mut result.options.get_mut(&opt.uid).unwrap().2;
-                            } else {
-                                opt_values = &mut new_values;
-                            }
-
-                            // It matches; see if we need to parse values
-                            if arg.len() > 2 + opt.longname.len() + 1 {
-                                // It could be following the option itself with an equal sign
-                                if opt.max_n_values == 1 {
-                                    // Make sure we didn't already see one
-                                    if opt_values.len() + 1 > opt.max_n_values as usize {
-                                        result.errors.push(String::from(format!("Too many values given for '--{}': expected {}, got {}.", opt.longname, opt.max_n_values, opt_values.len() + 1)));
-                                        status = -1;
-                                        break;
-                                    }
-
-                                    // It is; add the value
-                                    opt_values.push(String::from(&arg[2 + opt.longname.len() + 1..]));
-                                } else {
-                                    // Wtf is this
-                                    result.errors.push(String::from(format!("Got value after '--{}', which is only supported for options with at most 1 value.", opt.longname)));
-                                    status = -1;
+                            // Make sure its legal
+                            if larg.len() > o.longname.len() {
+                                if !sarg[2 + o.longname.len()].eq("=") {
+                                    // Not yet the end; continue instead
+                                    continue;
+                                } else if o.max_n_values == 0 {
+                                    // No values at all supported
+                                    result.errors.push(format!("Option '--{}' cannot accept values (is passed '{}').", o.longname, &arg[2 + o.longname.len() + 1..]));
+                                    error = true;
+                                    break;
+                                } else if o.max_n_values > 1 {
+                                    // More values supported
+                                    result.errors.push(format!("Passing a value immediately after an option is only supported for options with at most 1 value ('--{}' has at most {}).", o.longname, o.max_n_values));
+                                    error = true;
                                     break;
                                 }
-                            } else if opt.max_n_values > 0 {
-                                // Search for the values and add them to the list
-                                let mut values = ArgParser::parse_values(&args, &mut i, opt.max_n_values - opt_values.len() as u32, parse_options);
-                                opt_values.append(&mut values);
                             }
 
-                            // Insert it with the new values if we hadn't already
-                            if !result.options.contains_key(&opt.uid) {
-                                result.options.insert(opt.uid.clone(), (opt.shortname.clone(), opt.longname.clone(), new_values));
+                            // Otherwise, make sure the option is defined
+                            if !result.options.contains_key(&o.uid) {
+                                result.options.insert(o.uid.clone(), (o.shortname.clone(), o.longname.clone(), Vec::new()));
+                            }
+                            let values = &mut result.options.get_mut(&o.uid).unwrap().2;
+
+                            // Add the values as needed
+                            if larg.len() > o.longname.len() {
+                                // We know that the equal sign and number of arguments make sense, so add the rest as a value
+                                values.push(String::from(&arg[2 + o.longname.len() + 1..]));
+
+                            } else if o.max_n_values > 0 {
+                                // Parse the rest of the arguments as values
+                                let mut new_values = ArgParser::parse_values(args, &mut i, o.max_n_values, &mut parse_options, self.use_double_dash);
+                                values.append(&mut new_values);
+
                             }
 
-                            // Quit searching
-                            status = 1;
+                            // We're done
+                            found = true;
                             break;
                         }
                     }
-                    if status != 1 {
-                        if status == 0 { result.errors.push(String::from(format!("Unknown option '{}'{}", arg, if self.use_help { format!("; type '--{}' to see a list of options.", HELP_LONGNAME) } else { String::new() }))); }
+
+                    // If not found, throw an error
+                    if !found {
+                        if !error { result.errors.push(format!("Unknown option '{}'{}", arg, if self.use_help { "; use '--help' to see an overview of accepted options." } else { "" })); }
                         i += 1;
                         continue;
                     }
                 }
 
             } else {
-                // Check if we have a positional for this index
+                // It's a positional; check if we have any registered
                 if positional_i >= self.positionals.len() {
-                    // Ignore it; add the warning
-                    result.warnings.push(String::from(format!("Ignoring positional '{}' at index {}.", arg, positional_i)));
-                    positional_i += 1;
+                    result.warnings.push(format!("Skipping positional '{}' (index {})...", sarg, positional_i));
                     i += 1;
+                    positional_i += 1;
                     continue;
                 }
 
-                // Store it
-                let pos: &Positional = &self.positionals[positional_i];
-                result.positionals.insert(
-                    pos.uid.clone(), (pos.index, arg.clone())
-                );
-
-                // Increment the positional i
+                // We have, so add it
+                result.positionals.insert(self.positionals[positional_i].uid.clone(), (self.positionals[positional_i].index, arg.clone()));
                 positional_i += 1;
 
             }
@@ -794,19 +777,13 @@ impl ArgParser {
         }
 
         // Clear the values if help is given (leaving help in that case) or, if not, there are errors
-        println!("Checking help or errors...");
-        println!(" > Current number of parsed positionals: {}", result.positionals.len());
-        println!(" > Current number of parsed options    : {}", result.options.len());
-        println!(" > Current number of warnings          : {}", result.warnings.len());
-        println!(" > Current number of errors            : {}", result.errors.len());
         if self.use_help && result.options.contains_key(HELP_UID) {
-            println!("Help given!");
             // Clear the positionals
             result.positionals.clear();
             // Clear the options, so that's everything except help
-            result.options.retain(|key, _| !key.eq(HELP_UID) );
+            result.options.retain(|key, _| key.eq(HELP_UID) );
         } else if result.errors.len() > 0 {
-            println!("Errors discovered!");
+            // Clear everything
             result.positionals.clear();
             result.options.clear();
         }
@@ -922,7 +899,7 @@ impl ArgDict {
     /// 
     /// **Returns**  
     /// An Option with either the index of the given positional or 'none'.
-    pub fn get_pos_index(&self, uid: &str) -> std::option::Option<u32> {
+    pub fn get_pos_index(&self, uid: &str) -> std::option::Option<usize> {
         if self.has_pos(uid) {
             return Some(self.positionals.get(uid).unwrap().0);
         } else {
