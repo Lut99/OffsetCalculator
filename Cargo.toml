@@ -7,4 +7,6 @@ authors = ["Lut99"]
 [workspace]
 
 [dependencies]
-parse-args = { version="0.1.0", path="crates/args" }
+unicode-segmentation = "1.8.0"
+hex = "0.4.3"
+parse-args = { git = "https://github.com/Lut99/parse-args", branch="main" }

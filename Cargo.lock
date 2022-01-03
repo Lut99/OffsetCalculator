@@ -3,25 +3,34 @@
 version = 3
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "offsetcalculator"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "parse-args",
+ "unicode-segmentation",
 ]
 
 [[package]]
 name = "opstring"
-version = "0.1.0"
+version = "1.0.0"
+source = "git+https://github.com/Lut99/opstring?tag=v1.0.0#07942b02181acb9fbda6ba5f5ef4a05a63a14663"
 dependencies = [
  "unicode-segmentation",
 ]
 
 [[package]]
 name = "parse-args"
-version = "0.1.0"
+version = "1.0.0"
+source = "git+https://github.com/Lut99/parse-args?branch=main#ac6e1316c654327fd1ba040debaa6fb4c1bd74ca"
 dependencies = [
  "opstring",
- "unicode-segmentation",
 ]
 
 [[package]]
