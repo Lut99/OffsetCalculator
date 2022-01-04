@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:28:04
  * Last edited:
- *   03 Jan 2022, 12:10:31
+ *   04 Jan 2022, 12:33:44
  * Auto updated?
  *   Yes
  *
@@ -16,20 +16,26 @@
 
 /***** ENUMS *****/
 /// Lists all the terminal types registered in the parser.
-#[derive(Copy, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TerminalKind {
     /// Meta enum for when no kind is defined
-    Undefined,
+    Undefined((String, usize)),
+    /// Meta enum for when the string has ended
+    Eos,
 
     /// A decimal value.
     Decimal(u64),
     /// A hexadecimal value.
     Hex(u64),
+    /// A binary value.
+    Bin(u64),
 
     /// The to-decimal token
     ToDecimal,
     /// The to-hexadecimal token
     ToHex,
+    /// The to-binary token
+    ToBin,
 
     /// The plus-sign.
     Plus,
@@ -44,6 +50,9 @@ pub enum TerminalKind {
     LBracket,
     /// The right bracket
     RBracket,
+
+    /// The quit token
+    Exit,
 }
 
 
@@ -54,7 +63,7 @@ pub enum TerminalKind {
 /// The Symbol trait is used for all symbols across the parser
 pub trait Symbol {
     /// Returns whether or not the Token is terminal.
-    fn is_terminal() -> bool;
+    fn is_terminal(&self) -> bool;
 }
 
 
@@ -73,8 +82,10 @@ pub trait NonTerminal: Symbol {
 pub struct Token {
     /// The type of this Token, and thus possibly also carrying a value.
     pub kind : TerminalKind,
-    /// The position of this token in the input string.
-    pub pos  : usize,
+    /// The start position of this token in the input string.
+    pub pos1 : usize,
+    /// The end position (inclusive) of this token in the input string.
+    pub pos2 : usize,
 }
 
 impl Token {
@@ -82,14 +93,16 @@ impl Token {
     /// 
     /// **Arguments**
     ///  * `kind`: The type of this Token as a TerminalKind.
-    ///  * `pos`: The position of this Token in the input string.
+    ///  * `pos1`: The start position of this Token in the input string.
+    ///  * `pos2`: The end position (inclusive) of this Token in the input string.
     ///
     /// **Returns**  
     /// A newly constructed Token.
-    pub fn new(kind: TerminalKind, pos: usize) -> Token {
+    pub fn new(kind: TerminalKind, pos1: usize, pos2: usize) -> Token {
         return Token {
             kind  : kind,
-            pos   : pos,
+            pos1  : pos1,
+            pos2  : pos2,
         };
     }
 }
@@ -100,5 +113,5 @@ impl Symbol for Token {
     /// **Returns**  
     /// True is a terminal, false otherwise.
     #[inline]
-    fn is_terminal() -> bool { true }
+    fn is_terminal(&self) -> bool { true }
 }
