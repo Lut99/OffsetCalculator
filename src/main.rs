@@ -4,7 +4,7 @@
  * Created:
  *   21 Dec 2021, 15:17:24
  * Last edited:
- *   04 Jan 2022, 11:59:35
+ *   05 Jan 2022, 12:39:16
  * Auto updated?
  *   Yes
  *
@@ -17,9 +17,7 @@ mod ast;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use ast::tokenizer;
-use ast::symbols::Token;
-use ast::symbols::TerminalKind;
+use ast::parser;
 
 
 /***** ENTRY POINT *****/
@@ -84,28 +82,11 @@ fn main() {
             Ok(line) => {
                 // Success in reading line
                 
-                // Throw it thru the tokenizer
-                let mut tokenizer = tokenizer::Tokenizer::new(&line);
+                // Throw it thru the parser
+                let ast = parser::parse(&line);
 
-                // Consume until no more tokens
-                let mut stop = false;
-                loop {
-                    let token: Token = tokenizer.get();
-                    match token.kind {
-                        TerminalKind::Undefined(token) => { println!("Encountered unknown token '{}'.", token); }
-                        TerminalKind::Eos => { break; }
-                        TerminalKind::Exit => {
-                            stop = true;
-                            break;
-                        }
-                        _ => {
-                            print!("{:?} ", token.kind);
-                        }
-                    }
-                }
-                if stop { break; }
-                print!("\n");
-
+                // Traverse the AST
+                
             },
             Err(ReadlineError::Interrupted) => {
                 // Ctrl+C was pressed

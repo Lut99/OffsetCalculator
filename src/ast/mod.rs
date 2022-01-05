@@ -4,12 +4,12 @@
  * Created:
  *   03 Jan 2022, 10:46:24
  * Last edited:
- *   04 Jan 2022, 12:04:48
+ *   05 Jan 2022, 12:40:45
  * Auto updated?
  *   Yes
  *
  * Description:
- *   Defines the tokenizer module.
+ *   Defines the AST module.
 **/
 
 pub mod symbols;

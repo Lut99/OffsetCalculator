@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:28:04
  * Last edited:
- *   04 Jan 2022, 12:33:44
+ *   05 Jan 2022, 12:34:27
  * Auto updated?
  *   Yes
  *
@@ -19,7 +19,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum TerminalKind {
     /// Meta enum for when no kind is defined
-    Undefined((String, usize)),
+    Undefined(String),
     /// Meta enum for when the string has ended
     Eos,
 
@@ -60,17 +60,30 @@ pub enum TerminalKind {
 
 
 /***** TRAITS *****/
-/// The Symbol trait is used for all symbols across the parser
-pub trait Symbol {
-    /// Returns whether or not the Token is terminal.
-    fn is_terminal(&self) -> bool;
+/// Trait that allows the Symbol to be casted to an Any
+pub trait SymbolToAny: 'static {
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
+impl<T: 'static> SymbolToAny for T {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
 
+/// The Symbol trait is used for all symbols across the parser
+pub trait Symbol: std::fmt::Debug + SymbolToAny {
+    /// Returns whether or not the Token is terminal.
+    fn is_terminal(&self) -> bool;
 
-/// The NonTerminal trait is used to define semantics in the parser, i.e., reducable symbols.
-pub trait NonTerminal: Symbol {
-    
+    /// Returns the positions of the symbol in the original string.
+    fn pos(&self) -> (usize, usize);
+    /// Updates the position of the symbol.
+    /// 
+    /// **Arguments**
+    ///  * `pos1`: The new pos1.
+    ///  * `pos2`: The new pos2.
+    fn set_pos(&mut self, pos1: usize, pos2: usize);
 }
 
 
@@ -107,6 +120,13 @@ impl Token {
     }
 }
 
+impl std::fmt::Debug for Token {
+    /// Write a debug counterpart for this Token
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}[{}-{}]", self.kind, self.pos1, self.pos2)
+    }
+}
+
 impl Symbol for Token {
     /// Returns whether or not this token is terminal.
     /// 
@@ -114,4 +134,18 @@ impl Symbol for Token {
     /// True is a terminal, false otherwise.
     #[inline]
     fn is_terminal(&self) -> bool { true }
+
+    /// Returns the positions of the symbol in the original string.
+    #[inline]
+    fn pos(&self) -> (usize, usize) { (self.pos1, self.pos2) }
+    /// Updates the position of the symbol.
+    /// 
+    /// **Arguments**
+    ///  * `pos1`: The new pos1.
+    ///  * `pos2`: The new pos2.
+    #[inline]
+    fn set_pos(&mut self, pos1: usize, pos2: usize) {
+        self.pos1 = pos1;
+        self.pos2 = pos2;
+    }
 }

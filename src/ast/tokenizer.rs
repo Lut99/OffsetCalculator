@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:27:03
  * Last edited:
- *   04 Jan 2022, 12:34:00
+ *   05 Jan 2022, 12:34:09
  * Auto updated?
  *   Yes
  *
@@ -156,16 +156,13 @@ impl<'a> Tokenizer<'a> {
             return self.temp.remove(self.temp.len() - 1);
         }
 
-        // Otherwise, get it with its pos
+        // Otherwise, try to get the char
         let c   = self.input.next();
-        let pos = self.pos;
-
-        // If we failed, return the end-of-string character
-        if c == None { return ("\0", self.max_pos); }
+        if c == None { return ("\0", self.max_pos + 1); }
 
         // Otherwise, increment the pos and return
         self.pos += 1;
-        return (c.unwrap(), pos);
+        return (c.unwrap(), self.pos);
     }
 
     /// Puts the given character back on the stream.
