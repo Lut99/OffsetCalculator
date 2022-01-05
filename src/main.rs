@@ -4,7 +4,7 @@
  * Created:
  *   21 Dec 2021, 15:17:24
  * Last edited:
- *   05 Jan 2022, 12:39:16
+ *   05 Jan 2022, 16:39:40
  * Auto updated?
  *   Yes
  *
@@ -13,11 +13,13 @@
 **/
 
 mod ast;
+mod traversals;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use ast::parser;
+use traversals::print;
 
 
 /***** ENTRY POINT *****/
@@ -84,9 +86,16 @@ fn main() {
                 
                 // Throw it thru the parser
                 let ast = parser::parse(&line);
-
-                // Traverse the AST
-                
+                match ast {
+                    Some(node) => {
+                         // Traverse the AST
+                        print::traverse(node);
+                    }
+                    None => {
+                        // Skip this line
+                        continue;
+                    }
+                }
             },
             Err(ReadlineError::Interrupted) => {
                 // Ctrl+C was pressed

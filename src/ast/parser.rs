@@ -4,7 +4,7 @@
  * Created:
  *   04 Jan 2022, 12:00:03
  * Last edited:
- *   05 Jan 2022, 12:39:06
+ *   05 Jan 2022, 16:39:12
  * Auto updated?
  *   Yes
  *
@@ -38,7 +38,7 @@ enum ParserState {
 }
 
 /// Defines all constant types in the AST.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ConstantKind {
     /// Meta value for when no kind is defined yet
     Undefined,
@@ -52,7 +52,7 @@ pub enum ConstantKind {
 }
 
 /// Defines all mono operators in the AST.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum MonaryOperator {
     /// Meta value for when no operator is defined
     Undefined,
@@ -77,7 +77,7 @@ impl From<TerminalKind> for MonaryOperator {
 }
 
 /// Defines all binary operators in the AST.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOperator {
     /// Meta value for when no operator is defined
     Undefined,
@@ -114,19 +114,18 @@ impl From<TerminalKind> for BinaryOperator {
 pub enum ASTNode {
     /// A simple node that can be used as a placeholder
     Undefined,
-    /// Defines the 'exit' node.
-    Exit { pos1: usize, pos2: usize },
 
     /// Defines a runnable command that is NOT an expression.
     Cmd { cmd: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines the 'exit' node.
+    Exit { pos1: usize, pos2: usize },
+
     /// Defines an expression in the AST, which could be either a Const, BinOp or MonOp
     Expr { kind: ConstantKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
-
     /// Defines a binary operator in the AST
     BinOp { kind: ConstantKind, operator: BinaryOperator, left: Box<ASTNode>, right: Box<ASTNode>, pos1: usize, pos2: usize },
     /// Defines a monary operator in the AST
     MonOp { kind: ConstantKind, operator: MonaryOperator, expr: Box<ASTNode>, pos1: usize, pos2: usize },
-    
     /// Defines a constant in the AST
     Const { kind: ConstantKind, value: u64, pos1: usize, pos2: usize },
 }
