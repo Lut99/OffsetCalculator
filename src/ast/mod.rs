@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:46:24
  * Last edited:
- *   05 Jan 2022, 12:40:45
+ *   06 Jan 2022, 14:10:44
  * Auto updated?
  *   Yes
  *
@@ -15,3 +15,4 @@
 pub mod symbols;
 pub mod tokenizer;
 pub mod parser;
+pub mod symbol_table;

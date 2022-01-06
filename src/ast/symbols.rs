@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:28:04
  * Last edited:
- *   05 Jan 2022, 12:34:27
+ *   06 Jan 2022, 16:56:02
  * Auto updated?
  *   Yes
  *
@@ -20,39 +20,51 @@
 pub enum TerminalKind {
     /// Meta enum for when no kind is defined
     Undefined(String),
+    /// Meta enum for when an error occurred
+    Error(String),
     /// Meta enum for when the string has ended
     Eos,
 
+    /// An identifier.
+    ID(String),
+
     /// A decimal value.
-    Decimal(u64),
+    DEC(u64),
     /// A hexadecimal value.
-    Hex(u64),
+    HEX(u64),
     /// A binary value.
-    Bin(u64),
+    BIN(u64),
 
     /// The to-decimal token
-    ToDecimal,
+    TODEC,
     /// The to-hexadecimal token
-    ToHex,
+    TOHEX,
     /// The to-binary token
-    ToBin,
+    TOBIN,
+
+    // The equals-sign
+    EQUALS,
 
     /// The plus-sign.
-    Plus,
+    PLUS,
     /// The minus-sign.
-    Minus,
+    MINUS,
     /// The multiply-sign.
-    Multiply,
+    MULTIPLY,
     /// The divide-sign.
-    Divide,
+    DIVIDE,
 
     /// The left bracket
-    LBracket,
+    LBRACKET,
     /// The right bracket
-    RBracket,
+    RBRACKET,
 
+    /// The ShowVars token
+    SHOWVARS,
+    /// The Help token
+    HELP,
     /// The quit token
-    Exit,
+    EXIT,
 }
 
 

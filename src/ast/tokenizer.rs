@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:27:03
  * Last edited:
- *   05 Jan 2022, 12:34:09
+ *   06 Jan 2022, 16:56:20
  * Auto updated?
  *   Yes
  *
@@ -31,6 +31,21 @@ macro_rules! is_whitespace {
 macro_rules! is_separator {
     ($c:expr) => {
         (is_whitespace!($c) || $c.eq("\0") || $c.eq("+") || $c.eq("-") || $c.eq("*") || $c.eq("/") || $c.eq("(") || $c.eq(")"))
+    };
+}
+
+/// Checks if the given 'char' equals a valid ID-start character.
+macro_rules! is_id_start {
+    ($c:expr) => {
+        ($c.eq("a") || $c.eq("b") || $c.eq("c") || $c.eq("d") || $c.eq("e") || $c.eq("f") || $c.eq("g") || $c.eq("h") || $c.eq("i") || $c.eq("j") || $c.eq("k") || $c.eq("l") || $c.eq("m") || $c.eq("n") || $c.eq("o") || $c.eq("p") || $c.eq("q") || $c.eq("r") || $c.eq("s") || $c.eq("t") || $c.eq("u") || $c.eq("v") || $c.eq("w") || $c.eq("x") || $c.eq("y") || $c.eq("z") ||
+         $c.eq("A") || $c.eq("B") || $c.eq("C") || $c.eq("D") || $c.eq("E") || $c.eq("F") || $c.eq("G") || $c.eq("H") || $c.eq("I") || $c.eq("K") || $c.eq("K") || $c.eq("L") || $c.eq("M") || $c.eq("N") || $c.eq("O") || $c.eq("P") || $c.eq("Q") || $c.eq("R") || $c.eq("S") || $c.eq("T") || $c.eq("U") || $c.eq("V") || $c.eq("W") || $c.eq("X") || $c.eq("Y") || $c.eq("Z") ||
+         $c.eq("_"))
+    };
+}
+/// Checks if the given 'char' equals a valid ID character.
+macro_rules! is_id {
+    ($c:expr) => {
+        (is_id_start!($c) || is_numeric!($c))
     };
 }
 
@@ -68,44 +83,23 @@ enum TokenizerState {
     /// The start state
     Start,
 
+    /// We found an ID
+    Id,
+
     /// We found a '0'
     Zero,
+    /// The state for when we NEED a digit
+    FirstDigit,
     /// The state for when we find a digit
     Digit,
+    /// The state for when we NEED a hexadecimal digit
+    FirstHexDigit,
     /// The state for when we find a hexadecimal digit
     HexDigit,
+    /// The state for when we NEED a binary digit
+    FirstBinaryDigit,
     /// The state for when we find a binary digit
     BinaryDigit,
-
-    /// The state when we find a 'd'
-    D,
-    /// The state when we find a 'de'
-    De,
-    /// The state when we find a 'dec'
-    Dec,
-
-    /// The state when we find a 'h'
-    H,
-    /// The state when we find a 'he'
-    He,
-    /// The state when we find a 'hex'
-    Hex,
-
-    /// The state when we find a 'b'
-    B,
-    /// The state when we find a 'bi'
-    Bi,
-    /// The state when we find a 'bin'
-    Bin,
-
-    /// The state when we find a 'e'
-    E,
-    /// The state when we find a 'ex'
-    Ex,
-    /// The state when we find a 'exi'
-    Exi,
-    /// The state when we find a 'exit'
-    Exit,
 
     /// The state for when we encountered an unknown token and want to consume it
     UnknownToken,
@@ -226,57 +220,46 @@ impl<'a> Tokenizer<'a> {
                     start_pos = pos;
 
                     // Split on the character we see
-                    if c.eq("0") {
+                    if is_id_start!(c) {
+                        // Start of an ID!
+                        parsed_buffer.push_str(c);
+                        state = TokenizerState::Id;
+                        continue;
+
+                    } else if c.eq("0") {
                         // Digit _or_ start of hexadecimal
                         parsed_buffer.push_str(c);
                         state = TokenizerState::Zero;
                         continue;
-                    } if is_numeric!(c) {
+                    } else if is_numeric!(c) {
                         // A number; might be decimal
                         Tokenizer::parse_const(&mut value_buffer, c, 10);
                         parsed_buffer.push_str(c);
                         state = TokenizerState::Digit;
                         continue;
 
-                    } else if c.eq("d") {
-                        // Start of decimal?
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::D;
-                        continue;
-                    } else if c.eq("h") {
-                        // Start of hexadecimal?
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::H;
-                        continue;
-                    } else if c.eq("b") {
-                        // Start of binary?
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::B;
-                        continue;
-                    } else if c.eq("e") {
-                        // Quit the terminal?
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::E;
-                        continue;
+                    } else if c == "=" {
+                        // An equals sign!
+                        return Token::new(TerminalKind::EQUALS, start_pos, pos);
 
                     } else if c == "+" {
                         // A plus sign!
-                        return Token::new(TerminalKind::Plus, start_pos, pos);
+                        return Token::new(TerminalKind::PLUS, start_pos, pos);
                     } else if c == "-" {
                         // A plus sign!
-                        return Token::new(TerminalKind::Minus, start_pos, pos);
+                        return Token::new(TerminalKind::MINUS, start_pos, pos);
                     } else if c == "*" {
                         // A plus sign!
-                        return Token::new(TerminalKind::Multiply, start_pos, pos);
+                        return Token::new(TerminalKind::MULTIPLY, start_pos, pos);
                     } else if c == "/" {
                         // A plus sign!
-                        return Token::new(TerminalKind::Divide, start_pos, pos);
+                        return Token::new(TerminalKind::DIVIDE, start_pos, pos);
                     } else if c == "(" {
                         // A plus sign!
-                        return Token::new(TerminalKind::LBracket, start_pos, pos);
+                        return Token::new(TerminalKind::LBRACKET, start_pos, pos);
                     } else if c == ")" {
                         // A plus sign!
-                        return Token::new(TerminalKind::RBracket, start_pos, pos);
+                        return Token::new(TerminalKind::RBRACKET, start_pos, pos);
 
                     } else if is_whitespace!(c) {
                         // A whitespace; simply consume it, then try again
@@ -293,6 +276,43 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
 
+                TokenizerState::Id => {
+                    // Get the next character
+                    let (c, pos) = self.getc();
+
+                    // Determine what to do
+                    if is_id!(c) {
+                        // While it's an ID, keep parsing
+                        parsed_buffer.push_str(c);
+                        continue;
+                    } else if is_separator!(c) {
+                        self.putc(c, pos);
+
+                        // If we've parsed a keyword, return that instead
+                        if parsed_buffer.eq("dec") {
+                            return Token::new(TerminalKind::TODEC, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("hex") {
+                            return Token::new(TerminalKind::TOHEX, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("bin") {
+                            return Token::new(TerminalKind::TOBIN, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("show_vars") {
+                            return Token::new(TerminalKind::SHOWVARS, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("help") {
+                            return Token::new(TerminalKind::HELP, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("exit") {
+                            return Token::new(TerminalKind::EXIT, start_pos, pos - 1);
+                        }
+
+                        // Return it
+                        return Token::new(TerminalKind::ID(parsed_buffer), start_pos, pos - 1);
+                    }
+
+                    // Unknown token; consume it
+                    self.putc(c, pos);
+                    state = TokenizerState::UnknownToken;
+                    continue;
+                }
+
 
 
                 TokenizerState::Zero => {
@@ -303,17 +323,17 @@ impl<'a> Tokenizer<'a> {
                     if c.eq("d") || c.eq("D") {
                         // It's decimal
                         parsed_buffer.push_str(c);
-                        state = TokenizerState::Digit;
+                        state = TokenizerState::FirstDigit;
                         continue;
                     } else if c.eq("x") || c.eq("X") {
                         // It's hexadecimal
                         parsed_buffer.push_str(c);
-                        state = TokenizerState::HexDigit;
+                        state = TokenizerState::FirstHexDigit;
                         continue;
                     } else if c.eq("b") || c.eq("B") {
                         // It's binary
                         parsed_buffer.push_str(c);
-                        state = TokenizerState::BinaryDigit;
+                        state = TokenizerState::FirstBinaryDigit;
                         continue;
                     } else if is_numeric!(c) {
                         // Also decimal
@@ -324,7 +344,29 @@ impl<'a> Tokenizer<'a> {
                     } else if is_separator!(c) {
                         // It's a zero
                         self.putc(c, pos);
-                        return Token::new(TerminalKind::Decimal(0), start_pos, pos - 1);
+                        return Token::new(TerminalKind::DEC(0), start_pos, pos - 1);
+                    }
+
+                    // Unknown token; consume it
+                    self.putc(c, pos);
+                    state = TokenizerState::UnknownToken;
+                    continue;
+                }
+
+                TokenizerState::FirstDigit => {
+                    // Get the next character
+                    let (c, pos) = self.getc();
+
+                    // As long as its a digit, keep parsing
+                    if is_numeric!(c) {
+                        parsed_buffer.push_str(c);
+                        Tokenizer::parse_const(&mut value_buffer, c, 10);
+                        state = TokenizerState::Digit;
+                        continue;
+                    } else if is_separator!(c) {
+                        // We expected a digit!
+                        self.putc(c, pos);
+                        return Token::new(TerminalKind::Error(format!("Expected at least one digit after '0d'.")), start_pos, pos - 1);
                     }
 
                     // Unknown token; consume it
@@ -345,7 +387,29 @@ impl<'a> Tokenizer<'a> {
                     } else if is_separator!(c) {
                         // Stop parsing and return
                         self.putc(c, pos);
-                        return Token::new(TerminalKind::Decimal(value_buffer), start_pos, pos - 1);
+                        return Token::new(TerminalKind::DEC(value_buffer), start_pos, pos - 1);
+                    }
+
+                    // Unknown token; consume it
+                    self.putc(c, pos);
+                    state = TokenizerState::UnknownToken;
+                    continue;
+                }
+
+                TokenizerState::FirstHexDigit => {
+                    // Get the next character
+                    let (c, pos) = self.getc();
+
+                    // As long as its a digit, keep parsing
+                    if is_hex!(c) {
+                        parsed_buffer.push_str(c);
+                        Tokenizer::parse_const(&mut value_buffer, c, 16);
+                        state = TokenizerState::HexDigit;
+                        continue;
+                    } else if is_separator!(c) {
+                        // We expected a digit!
+                        self.putc(c, pos);
+                        return Token::new(TerminalKind::Error(format!("Expected at least one digit after '0x'.")), start_pos, pos - 1);
                     }
 
                     // Unknown token; consume it
@@ -360,13 +424,35 @@ impl<'a> Tokenizer<'a> {
 
                     // As long as its a hexdigit, keep parsing
                     if is_hex!(c) {
-                        Tokenizer::parse_const(&mut value_buffer, c, 16);
                         parsed_buffer.push_str(c);
+                        Tokenizer::parse_const(&mut value_buffer, c, 16);
                         continue;
                     } else if is_separator!(c) {
                         // Stop parsing and return
                         self.putc(c, pos);
-                        return Token::new(TerminalKind::Hex(value_buffer), start_pos, pos - 1);
+                        return Token::new(TerminalKind::HEX(value_buffer), start_pos, pos - 1);
+                    }
+
+                    // Unknown token; consume it
+                    self.putc(c, pos);
+                    state = TokenizerState::UnknownToken;
+                    continue;
+                }
+
+                TokenizerState::FirstBinaryDigit => {
+                    // Get the next character
+                    let (c, pos) = self.getc();
+
+                    // As long as its a digit, keep parsing
+                    if is_binary!(c) {
+                        parsed_buffer.push_str(c);
+                        Tokenizer::parse_const(&mut value_buffer, c, 2);
+                        state = TokenizerState::BinaryDigit;
+                        continue;
+                    } else if is_separator!(c) {
+                        // We expected a digit!
+                        self.putc(c, pos);
+                        return Token::new(TerminalKind::Error(format!("Expected at least one digit after '0b'.")), start_pos, pos - 1);
                     }
 
                     // Unknown token; consume it
@@ -387,239 +473,10 @@ impl<'a> Tokenizer<'a> {
                     } else if is_separator!(c) {
                         // Stop parsing and return
                         self.putc(c, pos);
-                        return Token::new(TerminalKind::Bin(value_buffer), start_pos, pos + 1);
+                        return Token::new(TerminalKind::BIN(value_buffer), start_pos, pos + 1);
                     }
 
                     // Unknown token; consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-
-
-                TokenizerState::D => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'e', continue; otherwise, illegal value
-                    if c.eq("e") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::De;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::De => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'c', continue until we find a whiteline
-                    if c.eq("c") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Dec;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Dec => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's a whiteline, quit
-                    if is_separator!(c) {
-                        // Return the token
-                        self.putc(c, pos);
-                        return Token::new(TerminalKind::ToDecimal, start_pos, pos - 1);
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-
-
-                TokenizerState::H => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'e', continue; otherwise, illegal value
-                    if c.eq("e") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::He;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::He => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'x', continue until we find a whiteline
-                    if c.eq("x") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Hex;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Hex => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's a whiteline, quit
-                    if is_separator!(c) {
-                        // Return the token
-                        self.putc(c, pos);
-                        return Token::new(TerminalKind::ToHex, start_pos, pos - 1);
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-
-
-                TokenizerState::B => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'i', continue; otherwise, illegal value
-                    if c.eq("i") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Bi;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Bi => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'n', continue until we find a whiteline
-                    if c.eq("n") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Bin;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Bin => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's a whiteline, quit
-                    if is_separator!(c) {
-                        // Return the token
-                        self.putc(c, pos);
-                        return Token::new(TerminalKind::ToBin, start_pos, pos - 1);
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-
-
-                TokenizerState::E => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'x', continue; otherwise, illegal value
-                    if c.eq("x") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Ex;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Ex => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 'i', continue until we find a whiteline
-                    if c.eq("i") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Exi;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Exi => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's an 't', continue until we find a whiteline
-                    if c.eq("t") {
-                        parsed_buffer.push_str(c);
-                        state = TokenizerState::Exit;
-                        continue;
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
-                    self.putc(c, pos);
-                    state = TokenizerState::UnknownToken;
-                    continue;
-                }
-
-                TokenizerState::Exit => {
-                    // Get the next char
-                    let (c, pos) = self.getc();
-
-                    // If it's a whiteline, quit
-                    if is_separator!(c) {
-                        // Return the token
-                        self.putc(c, pos);
-                        return Token::new(TerminalKind::Exit, start_pos, pos - 1);
-                    }
-
-                    // Otherwise, it's an unknown token, so consume it
                     self.putc(c, pos);
                     state = TokenizerState::UnknownToken;
                     continue;

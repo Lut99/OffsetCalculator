@@ -4,7 +4,7 @@
  * Created:
  *   04 Jan 2022, 12:00:03
  * Last edited:
- *   05 Jan 2022, 16:39:12
+ *   06 Jan 2022, 17:03:54
  * Auto updated?
  *   Yes
  *
@@ -20,26 +20,35 @@ use crate::ast::tokenizer::Tokenizer;
 
 /***** AST ENUMS *****/
 /// Defines the possible states for the parser, to implement a jump table.
+#[allow(non_camel_case_types)]
 enum ParserState {
     /// The start state
     Start,
 
     /// We've seen one Expr
     Expr,
-    /// We've seen one Expr and an operator
-    #[allow(non_camel_case_types)]
-    Expr_Op,
+    /// We've seen one Expr and an equals
+    Expr_Equals,
+
+    /// We've seen one Term
+    Term,
+    /// We've seen a Term followed by a plus OR a minus
+    Term_PlusORMinus,
+
+    /// We've seen one Factor
+    Factor,
+    /// We've seen a Factor followed by a multiplication OR a division
+    Factor_MultiplyORDivide,
 
     /// We've seen the right bracket
     RBracket,
     /// We've seen the right bracket followed by an expression
-    #[allow(non_camel_case_types)]
     RBracket_Expr,
 }
 
 /// Defines all constant types in the AST.
-#[derive(Debug, Clone, Copy)]
-pub enum ConstantKind {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ValueKind {
     /// Meta value for when no kind is defined yet
     Undefined,
 
@@ -51,34 +60,20 @@ pub enum ConstantKind {
     Binary,
 }
 
-/// Defines all mono operators in the AST.
-#[derive(Debug, Clone, Copy)]
-pub enum MonaryOperator {
-    /// Meta value for when no operator is defined
-    Undefined,
-
-    /// The to-dec operator
-    ToDec,
-    /// The to-hex operator
-    ToHex,
-    /// The to-bin operator
-    ToBin,
-}
-
-impl From<TerminalKind> for MonaryOperator {
+impl From<TerminalKind> for ValueKind {
     fn from(val: TerminalKind) -> Self {
         match val {
-            TerminalKind::ToDecimal => { MonaryOperator::ToDec }
-            TerminalKind::ToHex     => { MonaryOperator::ToHex }
-            TerminalKind::ToBin     => { MonaryOperator::ToBin }
-            _                       => { MonaryOperator::Undefined }
+            TerminalKind::DEC(_) | TerminalKind::TODEC => { ValueKind::Decimal }
+            TerminalKind::HEX(_) | TerminalKind::TOHEX => { ValueKind::Hexadecimal }
+            TerminalKind::BIN(_) | TerminalKind::TOBIN => { ValueKind::Binary }
+            _                                          => { ValueKind::Undefined }
         }
     }
 }
 
 /// Defines all binary operators in the AST.
-#[derive(Debug, Clone, Copy)]
-pub enum BinaryOperator {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LowBinaryOperator {
     /// Meta value for when no operator is defined
     Undefined,
 
@@ -86,20 +81,36 @@ pub enum BinaryOperator {
     Plus,
     /// The minus-operator
     Minus,
+}
+
+impl From<TerminalKind> for LowBinaryOperator {
+    fn from(val: TerminalKind) -> Self {
+        match val {
+            TerminalKind::PLUS     => { LowBinaryOperator::Plus }
+            TerminalKind::MINUS    => { LowBinaryOperator::Minus }
+            _                      => { LowBinaryOperator::Undefined }
+        }
+    }
+}
+
+/// Defines the high-precedence binary operators in the AST.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HighBinaryOperator {
+    /// Meta value for when no operator is defined
+    Undefined,
+
     /// The multiply-operator
     Multiply,
     /// The divide-operator
     Divide,
 }
 
-impl From<TerminalKind> for BinaryOperator {
+impl From<TerminalKind> for HighBinaryOperator {
     fn from(val: TerminalKind) -> Self {
         match val {
-            TerminalKind::Plus     => { BinaryOperator::Plus }
-            TerminalKind::Minus    => { BinaryOperator::Minus }
-            TerminalKind::Multiply => { BinaryOperator::Multiply }
-            TerminalKind::Divide   => { BinaryOperator::Divide }
-            _                      => { BinaryOperator::Undefined }
+            TerminalKind::MULTIPLY => { HighBinaryOperator::Multiply }
+            TerminalKind::DIVIDE   => { HighBinaryOperator::Divide }
+            _                      => { HighBinaryOperator::Undefined }
         }
     }
 }
@@ -117,33 +128,63 @@ pub enum ASTNode {
 
     /// Defines a runnable command that is NOT an expression.
     Cmd { cmd: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines the 'show_vars' node.
+    ShowVars { pos1: usize, pos2: usize },
+    /// Defines the 'help' node.
+    Help { pos1: usize, pos2: usize },
     /// Defines the 'exit' node.
     Exit { pos1: usize, pos2: usize },
 
-    /// Defines an expression in the AST, which could be either a Const, BinOp or MonOp
-    Expr { kind: ConstantKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
-    /// Defines a binary operator in the AST
-    BinOp { kind: ConstantKind, operator: BinaryOperator, left: Box<ASTNode>, right: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines an expression in the AST
+    Expr { override_kind: bool, kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a strong expression in the AST, which is an expression but for operators of slightly higher precedence
+    StrongExpr { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a term in the AST, which is an expression but for operators of higher precedence
+    Term { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a factor in the AST, which is an expression but for operators of more higher precedence
+    Factor { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a smallfactor in the AST, which is an expression but for operators of the highest precedence
+    SmallFactor { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+
+    /// Defines an assignment of an identifier
+    Assign { override_kind: bool, kind: ValueKind, identifier: String, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a binary operator for lower precedence operators in the AST
+    BinOpLow { override_kind: bool, kind: ValueKind, operator: LowBinaryOperator, left: Box<ASTNode>, right: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a binary operator for higher precedence operators in the AST
+    BinOpHigh { override_kind: bool, kind: ValueKind, operator: HighBinaryOperator, left: Box<ASTNode>, right: Box<ASTNode>, pos1: usize, pos2: usize },
     /// Defines a monary operator in the AST
-    MonOp { kind: ConstantKind, operator: MonaryOperator, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    MonOp { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    
+    /// Defines an identifier in the AST
+    Id { identifier: String, pos1: usize, pos2: usize },
     /// Defines a constant in the AST
-    Const { kind: ConstantKind, value: u64, pos1: usize, pos2: usize },
+    Const { kind: ValueKind, value: u64, pos1: usize, pos2: usize },
 }
 
 impl std::fmt::Debug for ASTNode {
     /// Write a debug counterpart for this Token
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ASTNode::Undefined                => { write!(f, "Undefined") }
-            ASTNode::Exit{ pos1: _, pos2: _ } => { write!(f, "Exit") }
+            ASTNode::Undefined => { write!(f, "Undefined") }
 
-            ASTNode::Cmd{ cmd: _, pos1: _, pos2: _ }         => { write!(f, "Cmd(...)") }
-            ASTNode::Expr{ kind, expr: _, pos1: _, pos2: _ } => { write!(f, "Expr<{:?}>(...)", kind) }
+            ASTNode::Cmd{ cmd, pos1: _, pos2: _ } => { write!(f, "Cmd({:?})", cmd) }
+            ASTNode::ShowVars{ pos1: _, pos2: _ } => { write!(f, "ShowVars") }
+            ASTNode::Help{ pos1: _, pos2: _ }     => { write!(f, "Help") }
+            ASTNode::Exit{ pos1: _, pos2: _ }     => { write!(f, "Exit") }
+            
+            ASTNode::Expr{ override_kind: _, kind, expr, pos1: _, pos2: _ } => { write!(f, "Expr<{:?}>({:?})", kind, expr) }
+            ASTNode::StrongExpr{ kind, expr, pos1: _, pos2: _ }             => { write!(f, "StrongExpr<{:?}>({:?})", kind, expr) }
+            ASTNode::Term{ kind, expr, pos1: _, pos2: _ }                   => { write!(f, "Term<{:?}>({:?})", kind, expr) }
+            ASTNode::Factor{ kind, expr, pos1: _, pos2: _ }                 => { write!(f, "Factor<{:?}>({:?})", kind, expr) }
+            ASTNode::SmallFactor{ kind, expr, pos1: _, pos2: _ }            => { write!(f, "SmallFactor<{:?}>({:?})", kind, expr) }
 
-            ASTNode::BinOp{ kind, operator, left: _, right: _, pos1: _, pos2: _ } => { write!(f, "BinOp<{:?}>(... {:?} ...)", kind, operator) }
-            ASTNode::MonOp{ kind, operator, expr: _, pos1: _, pos2: _ }           => { write!(f, "MonOp<{:?}>({:?} ...)", kind, operator) }
+            ASTNode::Assign{ override_kind, kind, identifier, expr, pos1: _, pos2: _ }         => { write!(f, "Assign<{} {:?}>({} = {:?})", override_kind, kind, identifier, expr) }
+            ASTNode::BinOpLow{ override_kind, kind, operator, left, right, pos1: _, pos2: _ }  => { write!(f, "BinOpL<{} {:?}>({:?} {:?} {:?})", override_kind, kind, left, operator, right) }
+            ASTNode::BinOpHigh{ override_kind, kind, operator, left, right, pos1: _, pos2: _ } => { write!(f, "BinOpH<{} {:?}>({:?} {:?} {:?})", override_kind, kind, left, operator, right) }
+            ASTNode::MonOp{ kind, expr, pos1: _, pos2: _ }                                     => { write!(f, "MonOp<{:?}>({:?})", kind, expr) }
 
-            ASTNode::Const{ kind, value: _, pos1: _, pos2: _ } => { write!(f, "Const<{:?}>", kind) }
+            ASTNode::Id{ identifier, pos1: _, pos2: _ }     => {write!(f, "Id({})", identifier) }
+            ASTNode::Const{ kind, value, pos1: _, pos2: _ } => { write!(f, "{}<{:?}>", value, kind) }
         }
     }
 }
@@ -161,15 +202,25 @@ impl Symbol for ASTNode {
     fn pos(&self) -> (usize, usize) {
         // Switch first
         match self {
-            ASTNode::Undefined          => { (usize::MAX, usize::MAX) }
-            ASTNode::Exit{ pos1, pos2 } => { (*pos1, *pos2) }
+            ASTNode::Undefined => { (usize::MAX, usize::MAX) }
 
-            ASTNode::Cmd{ cmd: _, pos1, pos2 }            => { (*pos1, *pos2) }
-            ASTNode::Expr{ kind: _, expr: _, pos1, pos2 } => { (*pos1, *pos2) }
+            ASTNode::Cmd{ cmd: _, pos1, pos2 } => { (*pos1, *pos2) }
+            ASTNode::ShowVars{ pos1, pos2 }    => { (*pos1, *pos2) }
+            ASTNode::Help{ pos1, pos2 }        => { (*pos1, *pos2) }
+            ASTNode::Exit{ pos1, pos2 }        => { (*pos1, *pos2) }
+            
+            ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1, pos2 } => { (*pos1, *pos2) }
+            ASTNode::StrongExpr{ kind: _, expr: _, pos1, pos2 }             => { (*pos1, *pos2) }
+            ASTNode::Term{ kind: _, expr: _, pos1, pos2 }                   => { (*pos1, *pos2) }
+            ASTNode::Factor{ kind: _, expr: _, pos1, pos2 }                 => { (*pos1, *pos2) }
+            ASTNode::SmallFactor{ kind: _, expr: _, pos1, pos2 }            => { (*pos1, *pos2) }
 
-            ASTNode::BinOp{ kind: _, operator: _, left: _, right: _, pos1, pos2 } => { (*pos1, *pos2) }
-            ASTNode::MonOp{ kind: _, operator: _, expr: _, pos1, pos2 }           => { (*pos1, *pos2) }
+            ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, pos1, pos2 }            => { (*pos1, *pos2) }
+            ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 }  => { (*pos1, *pos2) }
+            ASTNode::BinOpHigh{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 } => { (*pos1, *pos2) }
+            ASTNode::MonOp{ kind: _, expr: _, pos1, pos2 }                                              => { (*pos1, *pos2) }
 
+            ASTNode::Id{ identifier: _, pos1, pos2 }        => { (*pos1, *pos2) }
             ASTNode::Const{ kind: _, value: _, pos1, pos2 } => { (*pos1, *pos2) }
         }
     }
@@ -182,16 +233,26 @@ impl Symbol for ASTNode {
     fn set_pos(&mut self, new_pos1: usize, new_pos2: usize) {
         // Switch first
         match self {
-            ASTNode::Undefined                          => {}
-            ASTNode::Exit{ ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Undefined => {}
 
-            ASTNode::Cmd{ cmd: _, ref mut pos1, ref mut pos2 }            => { *pos1 = new_pos1; *pos2 = new_pos2; }
-            ASTNode::Expr{ kind: _, expr: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Cmd{ cmd: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::ShowVars{ ref mut pos1, ref mut pos2 }    => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Help{ ref mut pos1, ref mut pos2 }        => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Exit{ ref mut pos1, ref mut pos2 }        => { *pos1 = new_pos1; *pos2 = new_pos2; }
 
-            ASTNode::BinOp{ kind: _, operator: _, left: _, right: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
-            ASTNode::MonOp{ kind: _, operator: _, expr: _, ref mut pos1, ref mut pos2 }           => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Expr{ override_kind: _, kind: _, expr: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::StrongExpr{ kind: _, expr: _, ref mut pos1, ref mut pos2 }             => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Term{ kind: _, expr: _, ref mut pos1, ref mut pos2 }                   => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Factor{ kind: _, expr: _, ref mut pos1, ref mut pos2 }                 => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::SmallFactor{ kind: _, expr: _, ref mut pos1, ref mut pos2 }            => { *pos1 = new_pos1; *pos2 = new_pos2; }
 
-            ASTNode::Const{ kind: _, value: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, ref mut pos1, ref mut pos2 }            => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, ref mut pos1, ref mut pos2 }  => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::BinOpHigh{ override_kind: _, kind: _, operator: _, left: _, right: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::MonOp{ kind: _, expr: _, ref mut pos1, ref mut pos2 }                                              => { *pos1 = new_pos1; *pos2 = new_pos2; }
+
+            ASTNode::Id{ identifier: _, ref mut pos1, ref mut pos2 }         => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Const{ kind: _,  value: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
         }
     }
 }
@@ -208,7 +269,7 @@ impl Symbol for ASTNode {
 /// 
 /// **Returns**  
 /// The applied rule as a string, or 'an empty one if no rule is applied. Errors are automatically printed to stderr, and if they occur the rule 'error' is used.
-fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
+fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> String {
     // Define some temporary variables
     let mut last_node: &ASTNode = &ASTNode::Undefined;
     let mut last_token: &Token = &Token::new(TerminalKind::Undefined(String::new()), usize::MAX, usize::MAX);
@@ -231,8 +292,22 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
                     let token = s.as_any().downcast_ref::<Token>().unwrap();
 
                     // Switch on its kind
-                    match token.kind {
-                        TerminalKind::Exit => {
+                    match &token.kind {
+                        TerminalKind::SHOWVARS => {
+                            // Replace with the nonterminal version
+                            stack[i] = Box::new(ASTNode::ShowVars {
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("show_vars");
+                        }
+                        TerminalKind::HELP => {
+                            // Replace with the nonterminal version
+                            stack[i] = Box::new(ASTNode::Help {
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("help");
+                        }
+                        TerminalKind::EXIT => {
                             // Replace with the nonterminal version
                             stack[i] = Box::new(ASTNode::Exit {
                                 pos1: token.pos1, pos2: token.pos2
@@ -240,39 +315,56 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
                             return String::from("exit");
                         }
 
-                        TerminalKind::Decimal(val) => {
-                            // Replace on the stack with a constant
-                            stack[i] = Box::new(ASTNode::Const{
-                                kind: ConstantKind::Decimal,
-                                value: val,
-                                pos1: token.pos1, pos2: token.pos2
-                            });
-                            return String::from("constant_dec");
-                        }
-                        TerminalKind::Hex(val) => {
-                            // Replace on the stack with a constant
-                            stack[i] = Box::new(ASTNode::Const{
-                                kind: ConstantKind::Hexadecimal,
-                                value: val,
-                                pos1: token.pos1, pos2: token.pos2
-                            });
-                            return String::from("constant_hex");
-                        }
-                        TerminalKind::Bin(val) => {
-                            // Replace on the stack with a constant
-                            stack[i] = Box::new(ASTNode::Const{
-                                kind: ConstantKind::Binary,
-                                value: val,
-                                pos1: token.pos1, pos2: token.pos2
-                            });
-                            return String::from("constant_bin");
-                        }
-
-                        TerminalKind::RBracket => {
+                        TerminalKind::RBRACKET => {
                             // Start consuming the next expression
                             last_token = token;
                             state = ParserState::RBracket;
                             continue;
+                        }
+
+                        TerminalKind::ID(id) => {
+                            // Do not do it if there's an EQUALS coming up
+                            match lookahead.kind {
+                                TerminalKind::EQUALS => {
+                                    // Skip replacing
+                                    return String::new();
+                                }
+                                _ => {}
+                            }
+
+                            // Replace on the stack with an id
+                            stack[i] = Box::new(ASTNode::Id{
+                                identifier: id.clone(),
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("id");
+                        }
+                        TerminalKind::DEC(val) => {
+                            // Replace on the stack with a const
+                            stack[i] = Box::new(ASTNode::Const{
+                                kind: ValueKind::Decimal,
+                                value: *val,
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("const_dec");
+                        }
+                        TerminalKind::HEX(val) => {
+                            // Replace on the stack with a const
+                            stack[i] = Box::new(ASTNode::Const{
+                                kind: ValueKind::Hexadecimal,
+                                value: *val,
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("const_hex");
+                        }
+                        TerminalKind::BIN(val) => {
+                            // Replace on the stack with a const
+                            stack[i] = Box::new(ASTNode::Const{
+                                kind: ValueKind::Binary,
+                                value: *val,
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("const_bin");
                         }
 
                         // Ignore the rest
@@ -285,29 +377,133 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 
                     // Switch on its kind
                     match node {
-                        ASTNode::Expr{ kind:_, expr: _, pos1: _, pos2: _ } => {
-                            // Start traversing deeping in the thingy
-                            last_node = node;
-                            state = ParserState::Expr;
-                            continue;
+                        ASTNode::ShowVars{ pos1, pos2 } => {
+                            // Cast to a command
+                            stack[i] = Box::new(ASTNode::Cmd{
+                                cmd: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("cmd_showvars");
                         }
-
+                        ASTNode::Help{ pos1, pos2 } => {
+                            // Cast to a command
+                            stack[i] = Box::new(ASTNode::Cmd{
+                                cmd: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("cmd_help");
+                        }
                         ASTNode::Exit{ pos1, pos2 } => {
                             // Cast to a command
                             stack[i] = Box::new(ASTNode::Cmd{
                                 cmd: Box::new(node.clone()),
                                 pos1: *pos1, pos2: *pos2
                             });
-                            return String::from("cmd");
+                            return String::from("cmd_exit");
                         }
-                        ASTNode::MonOp{ kind: _, operator: _, expr: _, pos1, pos2 } | ASTNode::BinOp{ kind: _, operator: _, left: _, right: _, pos1, pos2 } | ASTNode::Const{ kind: _, value: _, pos1, pos2 } => {
+
+                        ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, pos1, pos2 } => {
                             // Cast to an expression
                             stack[i] = Box::new(ASTNode::Expr{
-                                kind: ConstantKind::Undefined,
+                                override_kind: false,
+                                kind: ValueKind::Undefined,
                                 expr: Box::new(node.clone()),
                                 pos1: *pos1, pos2: *pos2
                             });
-                            return String::from("expr");
+                            return String::from("expr_assign");
+                        }
+
+                        ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 } => {
+                            // Cast to a strongexpression
+                            stack[i] = Box::new(ASTNode::StrongExpr{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("strongexpr_binoplow");
+                        }
+
+                        ASTNode::BinOpHigh{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 } => {
+                            // Cast to an expression
+                            stack[i] = Box::new(ASTNode::Term{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("term_binophigh");
+                        }
+
+                        ASTNode::MonOp{ kind: _, expr: _, pos1, pos2 } |
+                        ASTNode::SmallFactor{ kind: _, expr: _, pos1, pos2 } => {
+                            // Cast to a factor
+                            stack[i] = Box::new(ASTNode::Factor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("factor_monop_smallfactor");
+                        }
+
+                        ASTNode::Id{ identifier: _, pos1, pos2 } => {
+                            // Cast to a smallfactor
+                            stack[i] = Box::new(ASTNode::SmallFactor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("smallfactor_id");
+                        }
+                        ASTNode::Const{ kind: _, value: _, pos1, pos2 } => {
+                            // Cast to a smallfactor
+                            stack[i] = Box::new(ASTNode::SmallFactor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("smallfactor_const");
+                        }
+
+                        ASTNode::Term{ kind: _, expr: _, pos1: _, pos2: _ } => {
+                            // Go to the start of possibly a binoplow
+                            last_node = node;
+                            state = ParserState::Term;
+                            continue;
+                        }
+
+                        ASTNode::Factor{ kind: _, expr: _, pos1: _, pos2: _ } => {
+                            // Go to the start of possibly a binoplow
+                            last_node = node;
+                            state = ParserState::Factor;
+                            continue;
+                        }
+
+                        ASTNode::StrongExpr{ kind: _, expr: _, pos1: _, pos2: _ } => {
+                            // Make sure there is no plus or minus on the lookahead
+                            match lookahead.kind {
+                                TerminalKind::PLUS |
+                                TerminalKind::MINUS => {
+                                    // Skip replacing
+                                    return String::new();
+                                }
+
+                                _ => {}
+                            }
+
+                            // Otherwise, cast to an expression
+                            stack[i] = Box::new(ASTNode::Expr{
+                                override_kind: false,
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: node.pos().0, pos2: node.pos().1
+                            });
+                            return String::from("expr_strongexpr");
+                        }
+
+                        ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1: _, pos2: _ } => {
+                            // Go to the start of possibly a binoplow
+                            last_node = node;
+                            state = ParserState::Expr;
+                            continue;
                         }
 
                         // Ignore the rest
@@ -319,7 +515,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 
 
             ParserState::Expr => {
-                // Get the first symbol
+                // Get the next symbol
                 if i == 0 { return String::new(); }
                 i -= 1;
                 let s = &stack[i];
@@ -332,11 +528,12 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
                     // Switch on its kind
                     match token.kind {
                         // Could be a monary op
-                        TerminalKind::ToDecimal | TerminalKind::ToHex | TerminalKind::ToBin => {
+                        TerminalKind::TODEC |
+                        TerminalKind::TOHEX |
+                        TerminalKind::TOBIN => {
                             // It is; generate the new symbol
                             let ns = Box::new(ASTNode::MonOp{
-                                kind: ConstantKind::Undefined,
-                                operator: MonaryOperator::from(token.kind.clone()),
+                                kind: ValueKind::from(token.kind.clone()),
                                 expr: Box::new(last_node.clone()),
                                 pos1: token.pos1, pos2: last_node.pos().1 }
                             );
@@ -346,14 +543,14 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
                             stack[i] = ns;
 
                             // Done
-                            return String::from("binop");
+                            return String::from("monop");
                         }
 
-                        // Could be a binary op
-                        TerminalKind::Plus | TerminalKind::Minus | TerminalKind::Multiply | TerminalKind::Divide => {
-                            // Store this operator too, then continue
-                            last_token = &token;
-                            state = ParserState::Expr_Op;
+                        // Could be an assign
+                        TerminalKind::EQUALS => {
+                            // It is; go to the equals state
+                            last_token = token;
+                            state = ParserState::Expr_Equals;
                             continue;
                         }
 
@@ -362,63 +559,276 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
                     }
 
                 } else {
-                    // Whatever the case, this seems funky
-                    eprintln!("{}: Missing operator before new value.", s.pos().1 + 1);
-                    // Pop the most recent one from the stack
-                    stack.remove(stack.len() - 1);
-                    // Return
-                    return String::from("error");
+                    // Ignore all nonterminals too
+                    return String::new();
                 }
             }
 
-            ParserState::Expr_Op => {
-                // Get the first symbol
+            ParserState::Expr_Equals => {
+                // Get the next symbol
+                if i > 0 {
+                    i -= 1;
+                    let s = &stack[i];
+
+                    // Switch on terminal VS nonterminal
+                    if s.is_terminal() {
+                        // Downcast
+                        let token = s.as_any().downcast_ref::<Token>().unwrap();
+
+                        // Switch on its kind
+                        match token.kind {
+                            // Could be an assign
+                            TerminalKind::ID(ref id) => {
+                                // Create the new node
+                                let ns = Box::new(ASTNode::Assign{
+                                    override_kind: false,
+                                    kind: ValueKind::Undefined,
+                                    identifier: id.clone(),
+                                    expr: Box::new(last_node.clone()),
+                                    pos1: token.pos1, pos2: token.pos2
+                                });
+
+                                // Replace it on the stack
+                                stack.remove(stack.len() - 1);
+                                stack.remove(stack.len() - 1);
+                                stack[i] = ns;
+
+                                // Done
+                                return String::from("assign");
+                            }
+
+                            // Used a keyword
+                            TerminalKind::TODEC |
+                            TerminalKind::TOHEX |
+                            TerminalKind::TOBIN |
+                            TerminalKind::SHOWVARS |
+                            TerminalKind::HELP |
+                            TerminalKind::EXIT => {
+                                // Tell the user what happened
+                                eprintln!("{}: Expected identifier, got keyword {}.", token.pos().0, &input[token.pos1 - 1..token.pos2]);
+                                stack.remove(stack.len() - 1);
+                                stack.remove(stack.len() - 1);
+                                return String::from("error");
+                            }
+
+                            _ => {}
+                        }
+
+                    }
+                }
+
+                // Not what we expected!
+                eprintln!("{}: Missing identifier before assign.", last_token.pos().0);
+                stack.remove(stack.len() - 1);
+                stack.remove(stack.len() - 1);
+                return String::from("error");
+            }
+
+
+
+            ParserState::Term => {
+                // If the lookahead is a multiply or a divide, let the term be
+                match lookahead.kind {
+                    TerminalKind::MULTIPLY |
+                    TerminalKind::DIVIDE => {
+                        // Skip replacing
+                        return String::new();
+                    }
+
+                    _ => {}
+                }
+
+                // Get the next symbol
+                if i > 0 {
+                    i -= 1;
+                    let s = &stack[i];
+
+                    // Switch on terminal VS nonterminal
+                    if s.is_terminal() {
+                        // Downcast
+                        let token = s.as_any().downcast_ref::<Token>().unwrap();
+
+                        // Switch on its kind
+                        match token.kind {
+                            TerminalKind::PLUS |
+                            TerminalKind::MINUS => {
+                                // Go to the last step of the binoplow
+                                last_token = token;
+                                state = ParserState::Term_PlusORMinus;
+                                continue;
+                            }
+
+                            _ => {}
+                        }
+                    }
+                }
+
+                // Replace the original term by an expression
+                let ns = Box::new(ASTNode::StrongExpr{
+                    kind: ValueKind::Undefined,
+                    expr: Box::new(last_node.clone()),
+                    pos1: last_node.pos().0, pos2: last_node.pos().1
+                });
+
+                // Replace with the top one on the stack
+                let i2 = stack.len() - 1;
+                stack[i2] = ns;
+
+                // Done
+                return String::from("strongexpr_term");
+            }
+
+            ParserState::Term_PlusORMinus => {
+                // Get the next symbol
                 if i == 0 { return String::new(); }
                 i -= 1;
                 let s = &stack[i];
 
+                // Get the operator
+                let op = LowBinaryOperator::from(last_token.kind.clone());
+
                 // Switch on terminal VS nonterminal
                 if s.is_terminal() {
-                    // Whatever the case, this seems funky
-                    eprintln!("{}: Stray operator.", last_token.pos1);
-                    // Pop the most recent two from the stack
+                    // Downcast
+                    let token = s.as_any().downcast_ref::<Token>().unwrap();
+
+                    // Show that this isn't what we mean
+                    eprintln!("{}: Missing value before {}.", token.pos1, if op == LowBinaryOperator::Plus { "addition" } else { "subtraction" });
                     stack.remove(stack.len() - 1);
                     stack.remove(stack.len() - 1);
-                    // Return
                     return String::from("error");
 
                 } else {
                     // Downcast
                     let node = s.as_any().downcast_ref::<ASTNode>().unwrap();
 
-                    // Switch on its kind
+                    // Switch on the type
                     match node {
-                        ASTNode::Expr{ kind:_, expr: _, pos1: _, pos2: _ } => {
-                            // We have a binary operator! Construct it first
-                            let ns = Box::new(ASTNode::BinOp{
-                                kind: ConstantKind::Undefined,
-                                operator: BinaryOperator::from(last_token.kind.clone()),
+                        ASTNode::StrongExpr{ kind: _, expr: _, pos1, pos2 } => {
+                            // Construct the binoplow!
+                            let ns = Box::new(ASTNode::BinOpLow{
+                                override_kind: false,
+                                kind: ValueKind::Undefined,
+                                operator: op,
                                 left: Box::new(node.clone()),
                                 right: Box::new(last_node.clone()),
-                                pos1: s.pos().0, pos2: last_node.pos().1
+                                pos1: *pos1, pos2: *pos2
                             });
-                            
-                            // Replace it on the stack
+
+                            // Replace on the stack
                             stack.remove(stack.len() - 1);
                             stack.remove(stack.len() - 1);
                             stack[i] = ns;
 
-                            // Return
-                            return String::from("binop");
+                            // Return!
+                            return String::from("binoplow");
                         }
-
-                        // The rest is probably a malformed node
+                        
+                        // For the rest, throw an error too
                         _ => {
-                            eprintln!("{}: Encountered unexpected operator.", last_token.pos1);
-                            // Pop the most recent two from the stack
+                            eprintln!("{}: Incompatible symbol '{}' before {}.", node.pos().0, &input[node.pos().0 - 1..node.pos().1], if op == LowBinaryOperator::Plus { "addition" } else { "subtraction" });
                             stack.remove(stack.len() - 1);
                             stack.remove(stack.len() - 1);
-                            // Return
+                            return String::from("error");
+                        }
+                    }
+                }
+            }
+
+
+
+            ParserState::Factor => {
+                // Get the next symbol
+                if i > 0 {
+                    i -= 1;
+                    let s = &stack[i];
+
+                    // Switch on terminal VS nonterminal
+                    if s.is_terminal() {
+                        // Downcast
+                        let token = s.as_any().downcast_ref::<Token>().unwrap();
+
+                        // Switch on its kind
+                        match token.kind {
+                            TerminalKind::MULTIPLY |
+                            TerminalKind::DIVIDE => {
+                                // Go to the last step of the binophigh
+                                last_token = token;
+                                state = ParserState::Factor_MultiplyORDivide;
+                                continue;
+                            }
+
+                            _ => {}
+                        }
+                    }
+                }
+
+                // Replace the original term by a term
+                let ns = Box::new(ASTNode::Term{
+                    kind: ValueKind::Undefined,
+                    expr: Box::new(last_node.clone()),
+                    pos1: last_node.pos().0, pos2: last_node.pos().1
+                });
+
+                // Replace with the top one on the stack
+                let i2 = stack.len() - 1;
+                stack[i2] = ns;
+
+                // Done
+                return String::from("term_factor");
+            }
+
+            ParserState::Factor_MultiplyORDivide => {
+                // Get the next symbol
+                if i == 0 { return String::new(); }
+                i -= 1;
+                let s = &stack[i];
+
+                // Get the operator
+                let op = HighBinaryOperator::from(last_token.kind.clone());
+
+                // Switch on terminal VS nonterminal
+                if s.is_terminal() {
+                    // Downcast
+                    let token = s.as_any().downcast_ref::<Token>().unwrap();
+
+                    // Show that this isn't what we mean
+                    eprintln!("{}: Missing value before {}.", token.pos1, if op == HighBinaryOperator::Multiply { "multiplication" } else { "division" });
+                    stack.remove(stack.len() - 1);
+                    stack.remove(stack.len() - 1);
+                    return String::from("error");
+
+                } else {
+                    // Downcast
+                    let node = s.as_any().downcast_ref::<ASTNode>().unwrap();
+
+                    // Switch on the type
+                    match node {
+                        ASTNode::Term{ kind: _, expr: _, pos1, pos2 } => {
+                            // Construct the binophigh!
+                            let ns = Box::new(ASTNode::BinOpHigh{
+                                override_kind: false,
+                                kind: ValueKind::Undefined,
+                                operator: op,
+                                left: Box::new(node.clone()),
+                                right: Box::new(last_node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+
+                            // Replace on the stack
+                            stack.remove(stack.len() - 1);
+                            stack.remove(stack.len() - 1);
+                            stack[i] = ns;
+
+                            // Return!
+                            return String::from("binophigh");
+                        }
+                        
+                        // For the rest, throw an error too
+                        _ => {
+                            eprintln!("{}: Incompatible symbol '{}' before {}.", node.pos().0, &input[node.pos().0 - 1..node.pos().1], if op == HighBinaryOperator::Multiply { "multiplication" } else { "division" });
+                            stack.remove(stack.len() - 1);
+                            stack.remove(stack.len() - 1);
                             return String::from("error");
                         }
                     }
@@ -435,12 +845,8 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 
                 // Switch on terminal VS nonterminal
                 if s.is_terminal() {
-                    // Whatever the case, this seems funky
-                    eprintln!("{}: Unexpected right bracket.", last_token.pos1);
-                    // Pop the most recent from the stack
-                    stack.remove(stack.len() - 1);
-                    // Return
-                    return String::from("error");
+                    // Simply ignore; any bracket errors are treated during the post-analysis
+                    return String::new();
 
                 } else {
                     // Downcast
@@ -448,7 +854,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 
                     // Switch on its kind
                     match node {
-                        ASTNode::Expr{ kind:_, expr: _, pos1: _, pos2: _ } => {
+                        ASTNode::Expr{ override_kind: _, kind:_, expr: _, pos1: _, pos2: _ } => {
                             // Store it, and keep parsing!
                             last_node = node;
                             state = ParserState::RBracket_Expr;
@@ -457,11 +863,8 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 
                         // The rest is probably a malformed node
                         _ => {
-                            eprintln!("{}: Encountered right bracket.", last_token.pos1);
-                            // Pop the most recent two from the stack
-                            stack.remove(stack.len() - 1);
-                            // Return
-                            return String::from("error");
+                            // Simply ignore; any bracket errors are treated during the post-analysis
+                            return String::new();
                         }
                     }
                 }
@@ -480,10 +883,14 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 
                     // Switch on its kind
                     match token.kind {
-                        TerminalKind::LBracket => {
-                            // Simply join it in an expression
-                            let mut ns = Box::new(last_node.clone());
-                            ns.set_pos(token.pos1, last_token.pos2);
+                        TerminalKind::LBRACKET => {
+                            // Simply join it in a smallfactor
+                            let ns = Box::new(ASTNode::SmallFactor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(last_node.clone()),
+                                pos1: token.pos1,
+                                pos2: last_token.pos2
+                            });
                             stack.remove(stack.len() - 1);
                             stack.remove(stack.len() - 1);
                             stack[i] = ns;
@@ -492,29 +899,19 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
                             return String::from("brackets");
                         }
 
-                        // Could be a binary op
-                        TerminalKind::Plus | TerminalKind::Minus | TerminalKind::Multiply | TerminalKind::Divide => {
-                            // Store this operator too, then continue
-                            last_token = &token;
-                            state = ParserState::Expr_Op;
-                            continue;
-                        }
-
-                        // Ignore the rest
+                        // Simply ignore the rest; any bracket errors are treated during the post-analysis
                         _ => { return String::new(); }
                     }
 
                 } else {
-                    // Whatever the case, this seems funky
-                    eprintln!("{}: Encountered unexpected symbol '{}'.", last_node.pos().0, &input[last_node.pos().0 - 1..last_node.pos().1]);
-                    // Pop the most recent two from the stack
-                    stack.remove(stack.len() - 1);
-                    stack.remove(stack.len() - 1);
-                    // Return
-                    return String::from("error");
+                    // Simply ignore the rest; any bracket errors are treated during the post-analysis
+                    return String::new();
                 }
             }
         }
+
+        // Should never get here!
+        
     }
 }
 
@@ -533,6 +930,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>) -> String {
 pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
     // Prepare the tokenizer to use for input
     let mut tokenizer = Tokenizer::new(input);
+    let mut lookahead = tokenizer.get();
 
     // Prepare the stack
     let mut stack: Vec<Box<dyn Symbol>> = Vec::new();
@@ -547,7 +945,7 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
         // println!();
 
         // Try to reduce the current stack
-        let rule = reduce(input, &mut stack);
+        let rule = reduce(input, &mut stack, &lookahead);
 
         // If we did anything, retry; otherwise, reduce to get more
         if rule.len() > 0 {
@@ -556,22 +954,24 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
             continue;
         } else {
             // Get the next token
-            let token = tokenizer.get();
-            match token.kind {
+            match lookahead.kind {
                 TerminalKind::Eos => {
                     // No more tokens; we're done parsing
                     break;
                 }
-                TerminalKind::Undefined(err) => {
+                TerminalKind::Undefined(ref err) => {
                     // Encountered an unknown token; try to get more
-                    eprintln!("{}: Encountered unknown token '{}'.", token.pos1, err);
-                    continue;
+                    eprintln!("{}: Encountered unknown token '{}'.", lookahead.pos1, *err);
+                    errored = true;
                 }
                 _ => {
                     // It's a legal token; push it to the stack
-                    stack.push(Box::new(token));
+                    stack.push(Box::new(lookahead));
                 }
             }
+
+            // Update the lookahead
+            lookahead = tokenizer.get();
         }
     }
 
@@ -587,7 +987,22 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
 
             // Switch on its kind
             match token.kind {
-                _ => {}
+                TerminalKind::LBRACKET => {
+                    eprintln!("{}: Unmatched left bracket.", token.pos1);
+                    errored = true;
+                    continue;
+                }
+                TerminalKind::RBRACKET => {
+                    eprintln!("{}: Unmatched right bracket.", token.pos1);
+                    errored = true;
+                    continue;
+                }
+
+                _ => {
+                    eprintln!("{}: Unexpected symbol '{}'.", token.pos1, &input[token.pos1 - 1..token.pos2]);
+                    errored = true;
+                    continue;
+                }
             }
 
         } else {
@@ -596,7 +1011,7 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
 
             // Switch on its kind
             match node {
-                ASTNode::Expr{ kind: _, expr: _, pos1: _, pos2: _ } => {
+                ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1: _, pos2: _ } => {
                     // Compain if in command mode
                     if is_cmd {
                         eprintln!("{}: Cannot give an expression ('{}') in between a command.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
@@ -622,8 +1037,8 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
             }
         }
     }
-    if stack.len() != 1 {
-        eprintln!("{}: Unexpected symbol '{}'.", stack[0].pos().0, &input[stack[0].pos().0 - 1..stack[0].pos().1]);
+    for i in 1..stack.len() {
+        eprintln!("{}: Unexpected symbol '{}'.", stack[i].pos().0, &input[stack[i].pos().0 - 1..stack[i].pos().1]);
         errored = true;
     }
 
@@ -632,4 +1047,45 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
 
     // Done; return the single node!
     return Some(stack[0].as_any().downcast_ref::<ASTNode>().unwrap().clone());
+}
+
+
+
+/// Given an already processed and parsed AST, tries to return the command it represents.
+/// 
+/// **Arguments**
+///  * `ast`: The AST to examine.
+/// 
+/// **Returns**  
+/// The command to represent. If there is none, returns None.
+pub fn get_command(ast: &ASTNode) -> Option<&ASTNode> {
+    // See if the topmost node is a Cmd
+    if let ASTNode::Cmd{ cmd, pos1: _, pos2: _ } = ast {
+        // Return the cmd
+        return Some(cmd);
+    }
+
+    // Return None
+    return None;
+}
+
+
+
+
+
+/// Given an already processed and parsed AST, returns the kind of the topmost expression.
+/// 
+/// **Arguments**
+///  * `ast`: The AST to get the root node type from.
+/// 
+/// **Returns**  
+/// The type of the root node as a ValueKind. While this can also be 'Undefined', this really shouldn't happen.
+pub fn get_kind(ast: &ASTNode) -> ValueKind {
+    // Check if the root node is an expression
+    if let ASTNode::Expr{ override_kind: _, kind, expr: _, pos1: _, pos2: _ } = ast {
+        return *kind;
+    }
+
+    // Otherwise, return blank
+    return ValueKind::Undefined;
 }

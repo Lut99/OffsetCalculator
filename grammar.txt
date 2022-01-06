@@ -1,0 +1,243 @@
+GRAMMAR.txt
+   by Lut99
+
+
+INTRODUCTION
+
+This document contains a description of the grammar used in the
+OffsetCalculator. Albeit a simply one, writing it down is necessary for future
+updates and other people interested in its workings.
+
+
+DEFINITIONS
+
+In the grammar rules, we use the following conventions:
+
+ - Every rule is in the form of "LHS -> RHS", which should be read as that
+   the symbols on the righthandside (RHS) can be converted to the symbls on
+   the lefthandside (LHS) during a reduce action.
+
+ - Some LHS have multiple definitions; in that case, they will be listed
+   underneath, using a bar ('|') instead of the arrow. We also write the LHS
+   only on the first line.
+   This notation can be read as that the LHS can be reduced from any of the
+   possible RHS given.
+
+ - We denote nonterminals, i.e., symbols that can be reduced, with lowercase.
+
+ - We denote terminals, i.e., symbols that cannot be reduced normally, with
+   UPPERCASE. To see with which text they correspond, check the TOKENS-
+   section.
+
+For the parser grammar, we use a different convention:
+
+ - Every parser state is written in the form:
+      _state:
+         symbol => nonterminal
+   or
+      _state:
+         symbol => _next_state
+   Both can be read as a parser state (prefixed with underscores), followed by
+   a list of actions based on the symbol that is currently examined. The
+   symbol is on the left, whereas the action is on the right. If it's a
+   nonterminal, the parser will replace everything parsed up to then with that
+   nonterminal; otherwise, it jumps to the next state and examines the next
+   symbol on the stack.
+
+ - All parser states are always prefixed by underscores ('_') and usually in
+   lowercase.
+
+ - For even easier implementation, terminal symbol matches are listed first,
+   following by any nonterminal symbol matches.
+
+ - A symbol of just an aterisk ('*') matches any other symbol not treated
+   before.
+
+ - Aside from the aterisk, we also have aterisk-N ('*N'), which matches any
+   unmatched nonterminal, and aterisk-T ('*T'), which matches any unmatched
+   terminal.
+
+ - Optionally, after a match rule, extra parenthesis ('()') may be given with
+   the name of one or more tokens. This allows states to take into account the
+   lookahead: it only proceeds with the reduction if the lookahead symbol is
+   any of the matches.
+   
+ - Additionally, the lookahead tokens can have an exclaimation mark ('!') in
+   front of them: in that case, the reduction also only occurs if NONE of
+   those symbols is matched as well (so on top of normal matching, allowing
+   them to be used at the same time).
+
+ - The lookahead-syntax may also be given after a state name and before the
+   parenthesis to indice that a whole state doesn't do anything if the
+   lookahead match fails.
+
+For the token rules, the following convention is used:
+
+ - Every rule is in the form of "TOKEN : REGEX", which should be read as that
+   the token on the lefthandside (TOKEN) can be matched using the regular
+   expression on the righthandside (REGEX).
+
+ - The tokens are all in UPPERCASE, to match the convention used in grammars.
+
+ - The regular expressions are all implemented as could be done using
+   JavaScript's regular expressions. This includes escape characters such as
+   '\+'.
+
+
+GRAMMAR
+
+Now, we give the OffsetCalculator's grammar:
+
+    start -> cmd
+          |  expr
+
+
+
+    cmd  -> show_vars
+         |  help
+         |  exit
+
+    show_vars -> SHOWVARS
+
+    help -> HELP
+
+    exit -> EXIT
+
+
+
+    expr -> assign
+         |  strongexpr
+
+    strongexpr -> binoplow
+               |  term
+
+    term -> binophigh
+         |  factor
+
+    factor -> monop
+           |  smallfactor
+
+    smallfactor -> LBRACKET expr RBRACKET
+                -> id
+                -> value
+
+
+
+    assign -> ID EQUALS expr
+
+    binoplow -> strongexpr PLUS term
+             |  strongexpr MINUS term
+
+    binophigh -> term MULTIPLY factor
+              |  term DIVIDE factor
+
+    monop -> TODEC expr
+          |  TOHEX expr
+          |  TOBIN expr
+    
+
+
+    id -> ID
+
+    value -> DEC
+          |  HEX
+          |  BIN
+
+
+PARSER GRAMMAR
+
+Our shift-reduce parser implements the order of operations in reverse; that
+is, to find to which LHS it should reduce, it tries to match the RHS in
+reverse order by use of a jumptable. To aid in designing this jump table, the
+possible states are given here as well that is generated from the grammar:
+
+_start:
+    SHOWVARS => showvars
+    HELP     => help
+    EXIT     => exit
+    RBRACKET => _rbracket
+    ID       => id
+    DEC      => value
+    HEX      => value
+    BIN      => value
+
+    show_vars   => cmd
+    help        => cmd
+    exit        => cmd
+    assign      => expr
+    binoplow    => strongexpr
+    binophigh   => term
+    monop       => factor
+    smallfactor => factor
+    id          => smallfactor (!EQUALS)
+    value       => smallfactor
+    term        => _term
+    factor      => _factor
+    strongexpr  => expr (!PLUS,!MINUS)
+    expr        => _expr
+
+_expr:
+    TODEC => monop
+    TOHEX => monop
+    TOBIN => monop
+    EQUALS => _expr_equals
+
+_expr_equals:
+    ID => assign
+
+_term(!MULTIPLY,!DIVIDE):
+    PLUS  => _term_plus
+    MINUS => _term_minus
+    * => strongexpr
+
+_term_plus:
+    strongexpr => binoplow
+
+_term_minus:
+    strongexpr => binoplow
+
+_factor:
+    MULTIPLY => _factor_multiply
+    DIVIDE   => _factor_divide
+    * => term
+
+_factor_multiply:
+    term => binophigh
+
+_factor_divide:
+    term => binophigh
+
+_rbracket:
+    expr => _rbracket_expr
+
+_rbracket_expr:
+    RBRACKET => smallfactor
+
+
+TOKENS
+
+The tokens themselves are parsed using regular expressions. They are given as:
+
+    ID : [a-zA-Z_][a-zA-Z0-9_]*
+
+    DEC : (0d)?[0-9]+
+    HEX : 0x[0-9a-fA-F]+
+    BIN : 0b[01]+
+
+    TODEC : dec
+    TOHEX : hex
+    TOBIN : bin
+
+    EQUALS : =
+
+    PLUS     : \+
+    MINUS    : -
+    MULTIPLY : \*
+    DIVIDE   : /
+
+    LBRACKET : \(
+    RBRACKET : \)
+
+    SHOWVARS : show_vars
+    HELP     : help
+    EXIT     : exit
