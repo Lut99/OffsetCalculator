@@ -4,7 +4,7 @@
  * Created:
  *   04 Jan 2022, 12:00:03
  * Last edited:
- *   06 Jan 2022, 17:03:54
+ *   07 Jan 2022, 12:16:37
  * Auto updated?
  *   Yes
  *
@@ -24,6 +24,9 @@ use crate::ast::tokenizer::Tokenizer;
 enum ParserState {
     /// The start state
     Start,
+
+    /// We've seen one Id
+    Id,
 
     /// We've seen one Expr
     Expr,
@@ -68,6 +71,30 @@ impl From<TerminalKind> for ValueKind {
             TerminalKind::BIN(_) | TerminalKind::TOBIN => { ValueKind::Binary }
             _                                          => { ValueKind::Undefined }
         }
+    }
+}
+impl std::str::FromStr for ValueKind {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Try to read
+        if s.to_lowercase().eq("decimal") {
+            return Ok(ValueKind::Decimal);
+        } else if s.to_lowercase().eq("hexadecimal") {
+            return Ok(ValueKind::Hexadecimal);
+        } else if s.to_lowercase().eq("binary") {
+            return Ok(ValueKind::Binary);
+        } else if s.to_lowercase().eq("undefined") {
+            return Ok(ValueKind::Undefined);
+        }
+
+        // Otherwise, return err
+        return Err(());
+    }
+}
+impl From<ValueKind> for String {
+    fn from(val: ValueKind) -> Self {
+        // Return the value
+        return format!("{:?}", val);
     }
 }
 
@@ -128,8 +155,14 @@ pub enum ASTNode {
 
     /// Defines a runnable command that is NOT an expression.
     Cmd { cmd: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines the 'del' node.
+    Del { identifier: String, pos1: usize, pos2: usize },
+    /// Defines the 'delall' node.
+    DelAll { pos1: usize, pos2: usize },
     /// Defines the 'show_vars' node.
     ShowVars { pos1: usize, pos2: usize },
+    /// Defines the 'clear_hist' node.
+    ClearHist { pos1: usize, pos2: usize },
     /// Defines the 'help' node.
     Help { pos1: usize, pos2: usize },
     /// Defines the 'exit' node.
@@ -167,10 +200,13 @@ impl std::fmt::Debug for ASTNode {
         match self {
             ASTNode::Undefined => { write!(f, "Undefined") }
 
-            ASTNode::Cmd{ cmd, pos1: _, pos2: _ } => { write!(f, "Cmd({:?})", cmd) }
-            ASTNode::ShowVars{ pos1: _, pos2: _ } => { write!(f, "ShowVars") }
-            ASTNode::Help{ pos1: _, pos2: _ }     => { write!(f, "Help") }
-            ASTNode::Exit{ pos1: _, pos2: _ }     => { write!(f, "Exit") }
+            ASTNode::Cmd{ cmd, pos1: _, pos2: _ }            => { write!(f, "Cmd({:?})", cmd) }
+            ASTNode::Del{ ref identifier, pos1: _, pos2: _ } => { write!(f, "Del({})", identifier) }
+            ASTNode::DelAll{ pos1: _, pos2: _ }              => { write!(f, "DelAll") }
+            ASTNode::ShowVars{ pos1: _, pos2: _ }            => { write!(f, "ShowVars") }
+            ASTNode::ClearHist{ pos1: _, pos2: _ }            => { write!(f, "ClearHist") }
+            ASTNode::Help{ pos1: _, pos2: _ }                => { write!(f, "Help") }
+            ASTNode::Exit{ pos1: _, pos2: _ }                => { write!(f, "Exit") }
             
             ASTNode::Expr{ override_kind: _, kind, expr, pos1: _, pos2: _ } => { write!(f, "Expr<{:?}>({:?})", kind, expr) }
             ASTNode::StrongExpr{ kind, expr, pos1: _, pos2: _ }             => { write!(f, "StrongExpr<{:?}>({:?})", kind, expr) }
@@ -178,12 +214,12 @@ impl std::fmt::Debug for ASTNode {
             ASTNode::Factor{ kind, expr, pos1: _, pos2: _ }                 => { write!(f, "Factor<{:?}>({:?})", kind, expr) }
             ASTNode::SmallFactor{ kind, expr, pos1: _, pos2: _ }            => { write!(f, "SmallFactor<{:?}>({:?})", kind, expr) }
 
-            ASTNode::Assign{ override_kind, kind, identifier, expr, pos1: _, pos2: _ }         => { write!(f, "Assign<{} {:?}>({} = {:?})", override_kind, kind, identifier, expr) }
+            ASTNode::Assign{ override_kind, kind, ref identifier, expr, pos1: _, pos2: _ }     => { write!(f, "Assign<{} {:?}>({} = {:?})", override_kind, kind, identifier, expr) }
             ASTNode::BinOpLow{ override_kind, kind, operator, left, right, pos1: _, pos2: _ }  => { write!(f, "BinOpL<{} {:?}>({:?} {:?} {:?})", override_kind, kind, left, operator, right) }
             ASTNode::BinOpHigh{ override_kind, kind, operator, left, right, pos1: _, pos2: _ } => { write!(f, "BinOpH<{} {:?}>({:?} {:?} {:?})", override_kind, kind, left, operator, right) }
             ASTNode::MonOp{ kind, expr, pos1: _, pos2: _ }                                     => { write!(f, "MonOp<{:?}>({:?})", kind, expr) }
 
-            ASTNode::Id{ identifier, pos1: _, pos2: _ }     => {write!(f, "Id({})", identifier) }
+            ASTNode::Id{ ref identifier, pos1: _, pos2: _ } => {write!(f, "Id({})", identifier) }
             ASTNode::Const{ kind, value, pos1: _, pos2: _ } => { write!(f, "{}<{:?}>", value, kind) }
         }
     }
@@ -204,10 +240,13 @@ impl Symbol for ASTNode {
         match self {
             ASTNode::Undefined => { (usize::MAX, usize::MAX) }
 
-            ASTNode::Cmd{ cmd: _, pos1, pos2 } => { (*pos1, *pos2) }
-            ASTNode::ShowVars{ pos1, pos2 }    => { (*pos1, *pos2) }
-            ASTNode::Help{ pos1, pos2 }        => { (*pos1, *pos2) }
-            ASTNode::Exit{ pos1, pos2 }        => { (*pos1, *pos2) }
+            ASTNode::Cmd{ cmd: _, pos1, pos2 }        => { (*pos1, *pos2) }
+            ASTNode::Del{ identifier: _, pos1, pos2 } => { (*pos1, *pos2) }
+            ASTNode::DelAll{ pos1, pos2 }             => { (*pos1, *pos2) }
+            ASTNode::ShowVars{ pos1, pos2 }           => { (*pos1, *pos2) }
+            ASTNode::ClearHist{ pos1, pos2 }          => { (*pos1, *pos2) }
+            ASTNode::Help{ pos1, pos2 }               => { (*pos1, *pos2) }
+            ASTNode::Exit{ pos1, pos2 }               => { (*pos1, *pos2) }
             
             ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1, pos2 } => { (*pos1, *pos2) }
             ASTNode::StrongExpr{ kind: _, expr: _, pos1, pos2 }             => { (*pos1, *pos2) }
@@ -235,10 +274,13 @@ impl Symbol for ASTNode {
         match self {
             ASTNode::Undefined => {}
 
-            ASTNode::Cmd{ cmd: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
-            ASTNode::ShowVars{ ref mut pos1, ref mut pos2 }    => { *pos1 = new_pos1; *pos2 = new_pos2; }
-            ASTNode::Help{ ref mut pos1, ref mut pos2 }        => { *pos1 = new_pos1; *pos2 = new_pos2; }
-            ASTNode::Exit{ ref mut pos1, ref mut pos2 }        => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Cmd{ cmd: _, ref mut pos1, ref mut pos2 }        => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Del{ identifier: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::DelAll{ ref mut pos1, ref mut pos2 }             => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::ShowVars{ ref mut pos1, ref mut pos2 }           => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::ClearHist{ ref mut pos1, ref mut pos2 }          => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Help{ ref mut pos1, ref mut pos2 }               => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            ASTNode::Exit{ ref mut pos1, ref mut pos2 }               => { *pos1 = new_pos1; *pos2 = new_pos2; }
 
             ASTNode::Expr{ override_kind: _, kind: _, expr: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
             ASTNode::StrongExpr{ kind: _, expr: _, ref mut pos1, ref mut pos2 }             => { *pos1 = new_pos1; *pos2 = new_pos2; }
@@ -293,12 +335,26 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
 
                     // Switch on its kind
                     match &token.kind {
+                        TerminalKind::DELALL => {
+                            // Replace with the nonterminal version
+                            stack[i] = Box::new(ASTNode::DelAll {
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("delall");
+                        }
                         TerminalKind::SHOWVARS => {
                             // Replace with the nonterminal version
                             stack[i] = Box::new(ASTNode::ShowVars {
                                 pos1: token.pos1, pos2: token.pos2
                             });
                             return String::from("show_vars");
+                        }
+                        TerminalKind::CLEARHIST => {
+                            // Replace with the nonterminal version
+                            stack[i] = Box::new(ASTNode::ClearHist {
+                                pos1: token.pos1, pos2: token.pos2
+                            });
+                            return String::from("clear_hist");
                         }
                         TerminalKind::HELP => {
                             // Replace with the nonterminal version
@@ -322,22 +378,11 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             continue;
                         }
 
-                        TerminalKind::ID(id) => {
-                            // Do not do it if there's an EQUALS coming up
-                            match lookahead.kind {
-                                TerminalKind::EQUALS => {
-                                    // Skip replacing
-                                    return String::new();
-                                }
-                                _ => {}
-                            }
-
-                            // Replace on the stack with an id
-                            stack[i] = Box::new(ASTNode::Id{
-                                identifier: id.clone(),
-                                pos1: token.pos1, pos2: token.pos2
-                            });
-                            return String::from("id");
+                        TerminalKind::ID(_) => {
+                            // Go to the id state
+                            last_token = token;
+                            state = ParserState::Id;
+                            continue;
                         }
                         TerminalKind::DEC(val) => {
                             // Replace on the stack with a const
@@ -377,6 +422,22 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
 
                     // Switch on its kind
                     match node {
+                        ASTNode::Del{ identifier: _, pos1, pos2 } => {
+                            // Cast to a command
+                            stack[i] = Box::new(ASTNode::Cmd{
+                                cmd: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("cmd_del");
+                        }
+                        ASTNode::DelAll{ pos1, pos2 } => {
+                            // Cast to a command
+                            stack[i] = Box::new(ASTNode::Cmd{
+                                cmd: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("cmd_delall");
+                        }
                         ASTNode::ShowVars{ pos1, pos2 } => {
                             // Cast to a command
                             stack[i] = Box::new(ASTNode::Cmd{
@@ -384,6 +445,14 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                                 pos1: *pos1, pos2: *pos2
                             });
                             return String::from("cmd_showvars");
+                        }
+                        ASTNode::ClearHist{ pos1, pos2 } => {
+                            // Cast to a command
+                            stack[i] = Box::new(ASTNode::Cmd{
+                                cmd: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("cmd_clearhist");
                         }
                         ASTNode::Help{ pos1, pos2 } => {
                             // Cast to a command
@@ -514,6 +583,67 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
 
 
 
+            ParserState::Id => {
+                // Get the id from the previous token
+                let id;
+                match &last_token.kind {
+                    TerminalKind::ID(tid) => {
+                        id = tid;
+                    }
+                    _ => { panic!("We've seen an ID, but the last token wasn't an ID; this should never happen!"); }
+                }
+
+                // Get the next symbol
+                if i > 0 {
+                    i -= 1;
+                    let s = &stack[i];
+
+                    // Switch on terminal VS nonterminal
+                    if s.is_terminal() {
+                        // Downcast
+                        let token = s.as_any().downcast_ref::<Token>().unwrap();
+
+                        // Switch on its kind
+                        match token.kind {
+                            TerminalKind::DEL => {
+                                // Join them in a Del node.
+                                let ns = Box::new(ASTNode::Del{
+                                    identifier: id.clone(),
+                                    pos1: token.pos1, pos2: token.pos2
+                                });
+
+                                // Replace on the stack
+                                stack.remove(stack.len() - 1);
+                                stack[i] = ns;
+
+                                // Done
+                                return String::from("del");
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                // Do not do it if there's an EQUALS coming up
+                match lookahead.kind {
+                    TerminalKind::EQUALS => {
+                        // Skip replacing
+                        return String::new();
+                    }
+                    _ => {}
+                }
+
+                // Replace the ID we parsed on the stack with an id
+                let stack_len = stack.len();
+                stack[stack_len - 1] = Box::new(ASTNode::Id{
+                    identifier: id.clone(),
+                    pos1: last_token.pos1, pos2: last_token.pos2
+                });
+                return String::from("id");
+            }
+
+
+
             ParserState::Expr => {
                 // Get the next symbol
                 if i == 0 { return String::new(); }
@@ -601,6 +731,8 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             TerminalKind::TODEC |
                             TerminalKind::TOHEX |
                             TerminalKind::TOBIN |
+                            TerminalKind::DEL |
+                            TerminalKind::DELALL |
                             TerminalKind::SHOWVARS |
                             TerminalKind::HELP |
                             TerminalKind::EXIT => {

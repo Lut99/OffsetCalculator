@@ -4,7 +4,7 @@
  * Created:
  *   21 Dec 2021, 15:17:24
  * Last edited:
- *   06 Jan 2022, 17:55:33
+ *   07 Jan 2022, 12:17:23
  * Auto updated?
  *   Yes
  *
@@ -14,10 +14,7 @@
 
 mod ast;
 mod traversals;
-
-use std::io;
-use std::io::prelude::*;
-use std::fs::File;
+mod session;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -51,7 +48,7 @@ fn main() {
     // None
     // Add the options
     parser.add_opt("exec", "e", "execute", 1, 1, "<expression>", "If given, simply executes only this line and then quits (not entering the REPL).");
-    parser.add_opt("session", "s", "session", 1, 1, "<path>", format!("If given, stores this session in the given file so you can resume later on. Note that, if present, the offsetcalculator always tries to load '{}'.", DEFAULT_SESSION_PATH));
+    parser.add_opt("session", "s", "session", 1, 1, "<path>", &format!("If given, stores this session in the given file so you can resume later on. Note that, if present, the offsetcalculator always tries to load '{}'.", DEFAULT_SESSION_PATH));
     parser.add_opt("no_session", "S", "no-session", 0, 0, "", "If given, does not load the session file in the current directory.");
 
     // Parse the arguments
@@ -147,53 +144,17 @@ fn main() {
     // Prepare the linereader
     let mut rl = Editor::<()>::new();
 
-    // Load the history if needed
+    // Load the session if needed
     if (!args_dict.has_opt("no_session") && std::path::Path::new(DEFAULT_SESSION_PATH).exists()) || args_dict.has_opt("session") {
-        // Prepare the path
-        let path: &str;
-        if !args_dict.has_opt("no_session") && std::path::Path::new(DEFAULT_SESSION_PATH).exists() {
-            path = DEFAULT_SESSION_PATH;
+        // Resolve the path
+        let mut path = DEFAULT_SESSION_PATH;
+        if args_dict.has_opt("session") {
+            path = &args_dict.get_opt("session").unwrap()[0];
         }
 
-        // First, load the last line of the file to get the ans
-        let mut file = File::open(path);
-        if !file.is_err() {
-            let mut buffer = String::new();
-            let res = file.unwrap().read_to_string(&mut buffer);
-            if res.is_err() {
-                // Split the buffer
-                let ans_line = buffer.lines().rev().next();
-                if ans_line.is_some() {
-                    // Split it into type and int
-                    // Now finally, try to parse the last one of those
-                    let val = ans_line.unwrap().parse::<u64>();
-                    if val.is_ok() {
-                        // Store it
-                        symtable.get_mut("ans").unwrap().1 = val.unwrap();
-                    }
-                    
-                } else {
-                    eprintln!("WARNING: Missing ans line in session file '{}'.", path);
-                }
-            } else {
-                eprintln!("WARNING: Could not read session file '{}': {}.", path, res.err().unwrap());
-            }
-        } else {
-            eprintln!("WARNING: Could not open session file '{}': {}.", path, file.err().unwrap());
-        }
-
-        // Load the file
-        let res = rl.load_history(&path);
-        if res.is_err() {
-            eprintln!("WARNING: Could not load history from '{}': {}.", path, res.err().unwrap());
-        }
-
-        // Sneak our ans value from the history
-        if rl.history().len() == 0 {
-            eprintln!("WARNING: Loaded history file is empty.");
-        } else {
-            // Try to parse
-            rl.history_mut().
+        // Try to load the session
+        if let Err(reason) = session::load(path, &mut symtable, &mut rl) {
+            eprintln!("{}: WARNING: {}: Not loading session file.", reason.path(), reason);
         }
     }
 
@@ -221,6 +182,25 @@ fn main() {
                 if let Some(cmd) = cmd_res {
                     // Try to run it!
                     match cmd {
+                        ASTNode::Del { ref identifier, pos1: _, pos2: _ } => {
+                            // Try to find the identifier
+                            if symtable.contains_key(identifier) {
+                                // Remove it
+                                symtable.remove(identifier);
+                                println!("Delete variable '{}'.\n", identifier);
+                            } else {
+                                eprintln!("Unknown identifier '{}'; cannot delete it.", identifier);
+                            }
+                            continue;
+                        }
+                        ASTNode::DelAll { pos1: _, pos2: _ } => {
+                            // Clear the symbol table
+                            symtable.clear();
+                            // Reinstate ans
+                            symtable.insert(String::from("ans"), (ValueKind::Undefined, 0));
+                            println!("Cleared all variables.\n");
+                            continue;
+                        }
                         ASTNode::ShowVars { pos1: _, pos2: _ } => {
                             // Print the symbol table
                             println!("Currently defined variables:");
@@ -230,10 +210,18 @@ fn main() {
                             println!();
                             continue;
                         }
+                        ASTNode::ClearHist { pos1: _, pos2: _ } => {
+                            // Clear the history
+                            rl.clear_history();
+                            println!("Cleared history.\n");
+                            continue;
+                        }
                         ASTNode::Help { pos1: _, pos2: _ } => {
                             // Print the help string
                             println!("You can simply write any calculation you like, which will then be evaluated.");
                             println!("There are a few special command keywords:");
+                            println!(" - 'del <id>': Deletes the variable with the given identifier.");
+                            println!(" - 'delall': Deletes all variables, even 'ans' (resetting it to undefined).");
                             println!(" - 'show_vars': Shows a list of currently loaded variables and their values.");
                             println!(" - 'help': Shows this menu.");
                             println!(" - 'exit': Exits the REPL.");
@@ -313,11 +301,18 @@ fn main() {
         }
     }
 
-    // Save the history
-    let res = rl.save_history(&histpath);
-    if res.is_err() {
-        let err = res.err().unwrap();
-        println!("WARNING: Could not save history to '{}': {}.", histpath, err);
+    // Save the session, if needed
+    if (!args_dict.has_opt("no_session") && std::path::Path::new(DEFAULT_SESSION_PATH).exists()) || args_dict.has_opt("session") {
+        // Resolve the path
+        let mut path = DEFAULT_SESSION_PATH;
+        if args_dict.has_opt("session") {
+            path = &args_dict.get_opt("session").unwrap()[0];
+        }
+
+        // Save the session!
+        if let Err(reason) = session::save(path, &symtable, &rl) {
+            eprintln!("{}: WARNING: {}: Not saving session file.", reason.path(), reason);
+        }
     }
 
     // Done

@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:28:04
  * Last edited:
- *   06 Jan 2022, 16:56:02
+ *   07 Jan 2022, 12:14:52
  * Auto updated?
  *   Yes
  *
@@ -59,8 +59,14 @@ pub enum TerminalKind {
     /// The right bracket
     RBRACKET,
 
+    /// The Del token
+    DEL,
+    /// The DelAll token
+    DELALL,
     /// The ShowVars token
     SHOWVARS,
+    /// The ClearHist token
+    CLEARHIST,
     /// The Help token
     HELP,
     /// The quit token

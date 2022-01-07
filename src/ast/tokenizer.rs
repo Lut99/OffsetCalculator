@@ -4,7 +4,7 @@
  * Created:
  *   03 Jan 2022, 10:27:03
  * Last edited:
- *   06 Jan 2022, 16:56:20
+ *   07 Jan 2022, 12:15:29
  * Auto updated?
  *   Yes
  *
@@ -295,8 +295,14 @@ impl<'a> Tokenizer<'a> {
                             return Token::new(TerminalKind::TOHEX, start_pos, pos - 1);
                         } else if parsed_buffer.eq("bin") {
                             return Token::new(TerminalKind::TOBIN, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("del") {
+                            return Token::new(TerminalKind::DEL, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("delall") {
+                            return Token::new(TerminalKind::DELALL, start_pos, pos - 1);
                         } else if parsed_buffer.eq("show_vars") {
                             return Token::new(TerminalKind::SHOWVARS, start_pos, pos - 1);
+                        } else if parsed_buffer.eq("clear_hist") {
+                            return Token::new(TerminalKind::CLEARHIST, start_pos, pos - 1);
                         } else if parsed_buffer.eq("help") {
                             return Token::new(TerminalKind::HELP, start_pos, pos - 1);
                         } else if parsed_buffer.eq("exit") {

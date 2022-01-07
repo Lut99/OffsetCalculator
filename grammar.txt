@@ -152,16 +152,21 @@ reverse order by use of a jumptable. To aid in designing this jump table, the
 possible states are given here as well that is generated from the grammar:
 
 _start:
-    SHOWVARS => showvars
-    HELP     => help
-    EXIT     => exit
-    RBRACKET => _rbracket
-    ID       => id
-    DEC      => value
-    HEX      => value
-    BIN      => value
+    DELALL    => delall
+    SHOWVARS  => showvars
+    CLEARHIST => clearhist
+    HELP      => help
+    EXIT      => exit
+    RBRACKET  => _rbracket
+    ID        => _id
+    DEC       => value
+    HEX       => value
+    BIN       => value
 
-    show_vars   => cmd
+    del         => cmd
+    delall      => cmd
+    showvars    => cmd
+    clearhist   => cmd
     help        => cmd
     exit        => cmd
     assign      => expr
@@ -169,12 +174,16 @@ _start:
     binophigh   => term
     monop       => factor
     smallfactor => factor
-    id          => smallfactor (!EQUALS)
+    id          => smallfactor
     value       => smallfactor
     term        => _term
     factor      => _factor
     strongexpr  => expr (!PLUS,!MINUS)
     expr        => _expr
+
+_id:
+    DEL => del
+    * => id (!EQUALS)
 
 _expr:
     TODEC => monop
@@ -238,6 +247,9 @@ The tokens themselves are parsed using regular expressions. They are given as:
     LBRACKET : \(
     RBRACKET : \)
 
-    SHOWVARS : show_vars
-    HELP     : help
-    EXIT     : exit
+    DEL       : del
+    DELALL    : delall
+    SHOWVARS  : show_vars
+    CLEARHIST : clear_hist
+    HELP      : help
+    EXIT      : exit

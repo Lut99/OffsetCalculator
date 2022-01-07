@@ -4,7 +4,7 @@
  * Created:
  *   05 Jan 2022, 12:39:41
  * Last edited:
- *   06 Jan 2022, 16:59:16
+ *   07 Jan 2022, 12:16:55
  * Auto updated?
  *   Yes
  *
@@ -55,8 +55,17 @@ fn traverse_node(mut node: ASTNode, indent: usize, symtable: &SymbolTable) -> AS
             **cmd = traverse_node(*cmd.clone(), indent + 3, symtable);
             println!("{})", n_spaces!(indent));
         }
+        ASTNode::Del{ ref identifier, pos1: _, pos2: _ } => {
+            println!("{}Del({})", n_spaces!(indent), identifier);
+        }
+        ASTNode::DelAll{ pos1: _, pos2: _ } => {
+            println!("{}DelAll", n_spaces!(indent));
+        }
         ASTNode::ShowVars{ pos1: _, pos2: _ } => {
             println!("{}ShowVars", n_spaces!(indent));
+        }
+        ASTNode::ClearHist{ pos1: _, pos2: _ } => {
+            println!("{}ClearHist", n_spaces!(indent));
         }
         ASTNode::Help{ pos1: _, pos2: _ } => {
             println!("{}Help", n_spaces!(indent));
