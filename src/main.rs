@@ -4,7 +4,7 @@
  * Created:
  *   21 Dec 2021, 15:17:24
  * Last edited:
- *   07 Jan 2022, 12:17:23
+ *   07 Jan 2022, 12:19:26
  * Auto updated?
  *   Yes
  *
@@ -22,6 +22,7 @@ use rustyline::Editor;
 use ast::parser::ValueKind;
 use ast::parser::ASTNode;
 use ast::symbol_table::SymbolTable;
+#[allow(unused_imports)]
 use traversals::print_tree;
 use traversals::trim;
 use traversals::types;

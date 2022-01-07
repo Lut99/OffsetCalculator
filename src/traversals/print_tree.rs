@@ -4,7 +4,7 @@
  * Created:
  *   05 Jan 2022, 12:39:41
  * Last edited:
- *   07 Jan 2022, 12:16:55
+ *   07 Jan 2022, 12:19:03
  * Auto updated?
  *   Yes
  *
@@ -42,6 +42,7 @@ macro_rules! n_spaces {
 /// 
 /// **Returns**  
 /// The given node, or else a replacement if deemed necessary.
+#[allow(dead_code)]
 fn traverse_node(mut node: ASTNode, indent: usize, symtable: &SymbolTable) -> ASTNode {
     // Switch on the node
     match node {
@@ -170,6 +171,7 @@ fn traverse_node(mut node: ASTNode, indent: usize, symtable: &SymbolTable) -> AS
 /// 
 /// **Returns**  
 /// The node to traverse, or else a replacement if the algorithm deems it necessary.
+#[allow(dead_code)]
 pub fn traverse(ast: ASTNode, symbol_table: &SymbolTable) -> ASTNode {
     // Simply return the traverse_node call
     return traverse_node(ast, 0, symbol_table);
