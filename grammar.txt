@@ -93,11 +93,20 @@ Now, we give the OffsetCalculator's grammar:
 
 
 
-    cmd  -> show_vars
+    cmd  -> del
+         |  delall
+         |  show_vars
+         |  clearhist
          |  help
          |  exit
 
+    del -> DEL ID
+
+    delall -> DELALL
+
     show_vars -> SHOWVARS
+
+    clearhist -> CLEARHIST
 
     help -> HELP
 
@@ -105,28 +114,28 @@ Now, we give the OffsetCalculator's grammar:
 
 
 
-    expr -> assign
-         |  strongexpr
-
-    strongexpr -> binoplow
-               |  term
+    expr -> binoplow
+         |  term
 
     term -> binophigh
          |  factor
 
     factor -> monop
            |  smallfactor
+    
+    smallfactor -> assign
+                |  tinyfactor
 
-    smallfactor -> LBRACKET expr RBRACKET
-                -> id
-                -> value
+    tinyfactor -> LBRACKET expr RBRACKET
+               |  id
+               |  const
 
 
 
     assign -> ID EQUALS expr
 
-    binoplow -> strongexpr PLUS term
-             |  strongexpr MINUS term
+    binoplow -> expr PLUS term
+             |  expr MINUS term
 
     binophigh -> term MULTIPLY factor
               |  term DIVIDE factor
@@ -139,7 +148,7 @@ Now, we give the OffsetCalculator's grammar:
 
     id -> ID
 
-    value -> DEC
+    const -> DEC
           |  HEX
           |  BIN
 
@@ -159,9 +168,9 @@ _start:
     EXIT      => exit
     RBRACKET  => _rbracket
     ID        => _id
-    DEC       => value
-    HEX       => value
-    BIN       => value
+    DEC       => const
+    HEX       => const
+    BIN       => const
 
     del         => cmd
     delall      => cmd
@@ -169,17 +178,17 @@ _start:
     clearhist   => cmd
     help        => cmd
     exit        => cmd
-    assign      => expr
-    binoplow    => strongexpr
+    binoplow    => expr
     binophigh   => term
     monop       => factor
-    smallfactor => factor
-    id          => smallfactor
-    value       => smallfactor
+    assign      => smallfactor
+    id          => tinyfactor
+    const       => tinyfactor
+    expr        => _expr
     term        => _term
     factor      => _factor
-    strongexpr  => expr (!PLUS,!MINUS)
-    expr        => _expr
+    smallfactor => factor
+    tinyfactor  => smallfactor
 
 _id:
     DEL => del
@@ -197,13 +206,13 @@ _expr_equals:
 _term(!MULTIPLY,!DIVIDE):
     PLUS  => _term_plus
     MINUS => _term_minus
-    * => strongexpr
+    * => expr
 
 _term_plus:
-    strongexpr => binoplow
+    expr => binoplow
 
 _term_minus:
-    strongexpr => binoplow
+    expr => binoplow
 
 _factor:
     MULTIPLY => _factor_multiply
@@ -220,7 +229,7 @@ _rbracket:
     expr => _rbracket_expr
 
 _rbracket_expr:
-    RBRACKET => smallfactor
+    LBRACKET => tinyfactor
 
 
 TOKENS

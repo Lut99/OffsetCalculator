@@ -90,7 +90,7 @@ To declare a variable, use the special _assign-operator_, after which it can be 
 ```
 Note that assignments are considered expressions too, and thus return the value that they assigned. This allows for a few more interesting expressions:
 ```
- > ex2 = (42 + (ex1 = 42))
+ > ex2 = (42 + ex1 = 42)
  = 84
 
  > ex1
@@ -134,6 +134,10 @@ This allows for workflows where a value has to be updated all the time and the i
  > ans + 42
  = 126
 ```
+
+### Precedence
+With all the operators and values explained, we can now put their precedence in a table:
+
 
 ### Commands
 Finally, instead of giving an expression, a few special commands can be given as well:

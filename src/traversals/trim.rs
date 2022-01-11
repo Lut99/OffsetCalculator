@@ -4,7 +4,7 @@
  * Created:
  *   06 Jan 2022, 12:04:53
  * Last edited:
- *   06 Jan 2022, 15:08:06
+ *   11 Jan 2022, 13:51:09
  * Auto updated?
  *   Yes
  *
@@ -45,10 +45,10 @@ fn traverse_node(mut node: ASTNode) -> ASTNode {
             }
         }
 
-        ASTNode::StrongExpr{ kind, ref mut expr, pos1, pos2 } |
         ASTNode::Term{ kind, ref mut expr, pos1, pos2 } |
         ASTNode::Factor{ kind, ref mut expr, pos1, pos2 } |
-        ASTNode::SmallFactor{ kind, ref mut expr, pos1, pos2 } => {
+        ASTNode::SmallFactor{ kind, ref mut expr, pos1, pos2 } |
+        ASTNode::TinyFactor{ kind, ref mut expr, pos1, pos2 } => {
             // Traverse into the child
             **expr = traverse_node(*expr.clone());
 

@@ -4,7 +4,7 @@
  * Created:
  *   04 Jan 2022, 12:00:03
  * Last edited:
- *   07 Jan 2022, 12:16:37
+ *   11 Jan 2022, 13:50:35
  * Auto updated?
  *   Yes
  *
@@ -170,14 +170,14 @@ pub enum ASTNode {
 
     /// Defines an expression in the AST
     Expr { override_kind: bool, kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
-    /// Defines a strong expression in the AST, which is an expression but for operators of slightly higher precedence
-    StrongExpr { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
     /// Defines a term in the AST, which is an expression but for operators of higher precedence
     Term { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
     /// Defines a factor in the AST, which is an expression but for operators of more higher precedence
     Factor { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
     /// Defines a smallfactor in the AST, which is an expression but for operators of the highest precedence
     SmallFactor { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
+    /// Defines a tinyfactor in the AST, which is an expression but for operators of the highest _highsest_ precedence
+    TinyFactor { kind: ValueKind, expr: Box<ASTNode>, pos1: usize, pos2: usize },
 
     /// Defines an assignment of an identifier
     Assign { override_kind: bool, kind: ValueKind, identifier: String, expr: Box<ASTNode>, pos1: usize, pos2: usize },
@@ -209,10 +209,10 @@ impl std::fmt::Debug for ASTNode {
             ASTNode::Exit{ pos1: _, pos2: _ }                => { write!(f, "Exit") }
             
             ASTNode::Expr{ override_kind: _, kind, expr, pos1: _, pos2: _ } => { write!(f, "Expr<{:?}>({:?})", kind, expr) }
-            ASTNode::StrongExpr{ kind, expr, pos1: _, pos2: _ }             => { write!(f, "StrongExpr<{:?}>({:?})", kind, expr) }
             ASTNode::Term{ kind, expr, pos1: _, pos2: _ }                   => { write!(f, "Term<{:?}>({:?})", kind, expr) }
             ASTNode::Factor{ kind, expr, pos1: _, pos2: _ }                 => { write!(f, "Factor<{:?}>({:?})", kind, expr) }
             ASTNode::SmallFactor{ kind, expr, pos1: _, pos2: _ }            => { write!(f, "SmallFactor<{:?}>({:?})", kind, expr) }
+            ASTNode::TinyFactor{ kind, expr, pos1: _, pos2: _ }             => { write!(f, "TinyFactor<{:?}>({:?})", kind, expr) }
 
             ASTNode::Assign{ override_kind, kind, ref identifier, expr, pos1: _, pos2: _ }     => { write!(f, "Assign<{} {:?}>({} = {:?})", override_kind, kind, identifier, expr) }
             ASTNode::BinOpLow{ override_kind, kind, operator, left, right, pos1: _, pos2: _ }  => { write!(f, "BinOpL<{} {:?}>({:?} {:?} {:?})", override_kind, kind, left, operator, right) }
@@ -249,10 +249,10 @@ impl Symbol for ASTNode {
             ASTNode::Exit{ pos1, pos2 }               => { (*pos1, *pos2) }
             
             ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1, pos2 } => { (*pos1, *pos2) }
-            ASTNode::StrongExpr{ kind: _, expr: _, pos1, pos2 }             => { (*pos1, *pos2) }
             ASTNode::Term{ kind: _, expr: _, pos1, pos2 }                   => { (*pos1, *pos2) }
             ASTNode::Factor{ kind: _, expr: _, pos1, pos2 }                 => { (*pos1, *pos2) }
             ASTNode::SmallFactor{ kind: _, expr: _, pos1, pos2 }            => { (*pos1, *pos2) }
+            ASTNode::TinyFactor{ kind: _, expr: _, pos1, pos2 }             => { (*pos1, *pos2) }
 
             ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, pos1, pos2 }            => { (*pos1, *pos2) }
             ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 }  => { (*pos1, *pos2) }
@@ -283,11 +283,11 @@ impl Symbol for ASTNode {
             ASTNode::Exit{ ref mut pos1, ref mut pos2 }               => { *pos1 = new_pos1; *pos2 = new_pos2; }
 
             ASTNode::Expr{ override_kind: _, kind: _, expr: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
-            ASTNode::StrongExpr{ kind: _, expr: _, ref mut pos1, ref mut pos2 }             => { *pos1 = new_pos1; *pos2 = new_pos2; }
             ASTNode::Term{ kind: _, expr: _, ref mut pos1, ref mut pos2 }                   => { *pos1 = new_pos1; *pos2 = new_pos2; }
             ASTNode::Factor{ kind: _, expr: _, ref mut pos1, ref mut pos2 }                 => { *pos1 = new_pos1; *pos2 = new_pos2; }
             ASTNode::SmallFactor{ kind: _, expr: _, ref mut pos1, ref mut pos2 }            => { *pos1 = new_pos1; *pos2 = new_pos2; }
-
+            ASTNode::TinyFactor{ kind: _, expr: _, ref mut pos1, ref mut pos2 }             => { *pos1 = new_pos1; *pos2 = new_pos2; }
+            
             ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, ref mut pos1, ref mut pos2 }            => { *pos1 = new_pos1; *pos2 = new_pos2; }
             ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, ref mut pos1, ref mut pos2 }  => { *pos1 = new_pos1; *pos2 = new_pos2; }
             ASTNode::BinOpHigh{ override_kind: _, kind: _, operator: _, left: _, right: _, ref mut pos1, ref mut pos2 } => { *pos1 = new_pos1; *pos2 = new_pos2; }
@@ -471,27 +471,16 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             return String::from("cmd_exit");
                         }
 
-                        ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, pos1, pos2 } => {
-                            // Cast to an expression
+                        ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 } => {
+                            // Cast to a strongexpression
                             stack[i] = Box::new(ASTNode::Expr{
                                 override_kind: false,
                                 kind: ValueKind::Undefined,
                                 expr: Box::new(node.clone()),
                                 pos1: *pos1, pos2: *pos2
                             });
-                            return String::from("expr_assign");
-                        }
-
-                        ASTNode::BinOpLow{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 } => {
-                            // Cast to a strongexpression
-                            stack[i] = Box::new(ASTNode::StrongExpr{
-                                kind: ValueKind::Undefined,
-                                expr: Box::new(node.clone()),
-                                pos1: *pos1, pos2: *pos2
-                            });
                             return String::from("strongexpr_binoplow");
                         }
-
                         ASTNode::BinOpHigh{ override_kind: _, kind: _, operator: _, left: _, right: _, pos1, pos2 } => {
                             // Cast to an expression
                             stack[i] = Box::new(ASTNode::Term{
@@ -501,71 +490,42 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             });
                             return String::from("term_binophigh");
                         }
-
-                        ASTNode::MonOp{ kind: _, expr: _, pos1, pos2 } |
-                        ASTNode::SmallFactor{ kind: _, expr: _, pos1, pos2 } => {
+                        ASTNode::MonOp{ kind: _, expr: _, pos1, pos2 } => {
                             // Cast to a factor
                             stack[i] = Box::new(ASTNode::Factor{
                                 kind: ValueKind::Undefined,
                                 expr: Box::new(node.clone()),
                                 pos1: *pos1, pos2: *pos2
                             });
-                            return String::from("factor_monop_smallfactor");
+                            return String::from("factor_monop");
+                        }
+                        ASTNode::Assign{ override_kind: _, kind: _, identifier: _, expr: _, pos1, pos2 } => {
+                            // Cast it to a smallfactor
+                            stack[i] = Box::new(ASTNode::SmallFactor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("smallfactor_assign");
                         }
 
                         ASTNode::Id{ identifier: _, pos1, pos2 } => {
                             // Cast to a smallfactor
-                            stack[i] = Box::new(ASTNode::SmallFactor{
+                            stack[i] = Box::new(ASTNode::TinyFactor{
                                 kind: ValueKind::Undefined,
                                 expr: Box::new(node.clone()),
                                 pos1: *pos1, pos2: *pos2
                             });
-                            return String::from("smallfactor_id");
+                            return String::from("tinyfactor_id");
                         }
                         ASTNode::Const{ kind: _, value: _, pos1, pos2 } => {
                             // Cast to a smallfactor
-                            stack[i] = Box::new(ASTNode::SmallFactor{
+                            stack[i] = Box::new(ASTNode::TinyFactor{
                                 kind: ValueKind::Undefined,
                                 expr: Box::new(node.clone()),
                                 pos1: *pos1, pos2: *pos2
                             });
-                            return String::from("smallfactor_const");
-                        }
-
-                        ASTNode::Term{ kind: _, expr: _, pos1: _, pos2: _ } => {
-                            // Go to the start of possibly a binoplow
-                            last_node = node;
-                            state = ParserState::Term;
-                            continue;
-                        }
-
-                        ASTNode::Factor{ kind: _, expr: _, pos1: _, pos2: _ } => {
-                            // Go to the start of possibly a binoplow
-                            last_node = node;
-                            state = ParserState::Factor;
-                            continue;
-                        }
-
-                        ASTNode::StrongExpr{ kind: _, expr: _, pos1: _, pos2: _ } => {
-                            // Make sure there is no plus or minus on the lookahead
-                            match lookahead.kind {
-                                TerminalKind::PLUS |
-                                TerminalKind::MINUS => {
-                                    // Skip replacing
-                                    return String::new();
-                                }
-
-                                _ => {}
-                            }
-
-                            // Otherwise, cast to an expression
-                            stack[i] = Box::new(ASTNode::Expr{
-                                override_kind: false,
-                                kind: ValueKind::Undefined,
-                                expr: Box::new(node.clone()),
-                                pos1: node.pos().0, pos2: node.pos().1
-                            });
-                            return String::from("expr_strongexpr");
+                            return String::from("tinyfactor_const");
                         }
 
                         ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1: _, pos2: _ } => {
@@ -573,6 +533,36 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             last_node = node;
                             state = ParserState::Expr;
                             continue;
+                        }
+                        ASTNode::Term{ kind: _, expr: _, pos1: _, pos2: _ } => {
+                            // Go to the start of possibly a binoplow
+                            last_node = node;
+                            state = ParserState::Term;
+                            continue;
+                        }
+                        ASTNode::Factor{ kind: _, expr: _, pos1: _, pos2: _ } => {
+                            // Go to the start of possibly a binoplow
+                            last_node = node;
+                            state = ParserState::Factor;
+                            continue;
+                        }
+                        ASTNode::SmallFactor{ kind: _, expr: _, pos1, pos2 } => {
+                            // Cast to a factor
+                            stack[i] = Box::new(ASTNode::Factor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("factor_smallfactor");
+                        }
+                        ASTNode::TinyFactor{ kind: _, expr: _, pos1, pos2 } => {
+                            // Cast to a smallfactor
+                            stack[i] = Box::new(ASTNode::SmallFactor{
+                                kind: ValueKind::Undefined,
+                                expr: Box::new(node.clone()),
+                                pos1: *pos1, pos2: *pos2
+                            });
+                            return String::from("smallfactor_tinyfactor");
                         }
 
                         // Ignore the rest
@@ -734,6 +724,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             TerminalKind::DEL |
                             TerminalKind::DELALL |
                             TerminalKind::SHOWVARS |
+                            TerminalKind::CLEARHIST |
                             TerminalKind::HELP |
                             TerminalKind::EXIT => {
                                 // Tell the user what happened
@@ -796,7 +787,8 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                 }
 
                 // Replace the original term by an expression
-                let ns = Box::new(ASTNode::StrongExpr{
+                let ns = Box::new(ASTNode::Expr{
+                    override_kind: false,
                     kind: ValueKind::Undefined,
                     expr: Box::new(last_node.clone()),
                     pos1: last_node.pos().0, pos2: last_node.pos().1
@@ -807,7 +799,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                 stack[i2] = ns;
 
                 // Done
-                return String::from("strongexpr_term");
+                return String::from("expr_term");
             }
 
             ParserState::Term_PlusORMinus => {
@@ -836,7 +828,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
 
                     // Switch on the type
                     match node {
-                        ASTNode::StrongExpr{ kind: _, expr: _, pos1, pos2 } => {
+                        ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1, pos2 } => {
                             // Construct the binoplow!
                             let ns = Box::new(ASTNode::BinOpLow{
                                 override_kind: false,

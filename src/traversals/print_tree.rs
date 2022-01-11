@@ -4,7 +4,7 @@
  * Created:
  *   05 Jan 2022, 12:39:41
  * Last edited:
- *   07 Jan 2022, 12:19:03
+ *   11 Jan 2022, 13:50:55
  * Auto updated?
  *   Yes
  *
@@ -81,12 +81,6 @@ fn traverse_node(mut node: ASTNode, indent: usize, symtable: &SymbolTable) -> AS
             **expr = traverse_node(*expr.clone(), indent + 3, symtable);
             println!("{})", n_spaces!(indent));
         }
-        ASTNode::StrongExpr{ kind, ref mut expr, pos1: _, pos2: _ } => {
-            // Print the child of the term recursively
-            println!("{}StrongExpr<{:?}>(", n_spaces!(indent), kind);
-            **expr = traverse_node(*expr.clone(), indent + 3, symtable);
-            println!("{})", n_spaces!(indent));
-        }
         ASTNode::Term{ kind, ref mut expr, pos1: _, pos2: _ } => {
             // Print the child of the term recursively
             println!("{}Term<{:?}>(", n_spaces!(indent), kind);
@@ -102,6 +96,12 @@ fn traverse_node(mut node: ASTNode, indent: usize, symtable: &SymbolTable) -> AS
         ASTNode::SmallFactor{ kind, ref mut expr, pos1: _, pos2: _ } => {
             // Print the child of the term recursively
             println!("{}SmallFactor<{:?}>(", n_spaces!(indent), kind);
+            **expr = traverse_node(*expr.clone(), indent + 3, symtable);
+            println!("{})", n_spaces!(indent));
+        }
+        ASTNode::TinyFactor{ kind, ref mut expr, pos1: _, pos2: _ } => {
+            // Print the child of the term recursively
+            println!("{}TinyFactor<{:?}>(", n_spaces!(indent), kind);
             **expr = traverse_node(*expr.clone(), indent + 3, symtable);
             println!("{})", n_spaces!(indent));
         }
