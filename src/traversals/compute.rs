@@ -4,7 +4,7 @@
  * Created:
  *   06 Jan 2022, 12:59:34
  * Last edited:
- *   06 Jan 2022, 16:49:54
+ *   11 Jan 2022, 14:15:10
  * Auto updated?
  *   Yes
  *
@@ -61,7 +61,7 @@ fn traverse_node(mut node: ASTNode, value: &mut u64, symtable: &mut SymbolTable,
                         }
                         None => {
                             // Overflow
-                            eprintln!("{}: Overflow occurred while performing {} + {}.", pos1, left_val, right_val);
+                            eprintln!("   {}: Overflow occurred while performing {} + {}.", pos1, left_val, right_val);
                             *error = true;
                         }
                     }
@@ -75,7 +75,7 @@ fn traverse_node(mut node: ASTNode, value: &mut u64, symtable: &mut SymbolTable,
                         }
                         None => {
                             // Overflow
-                            eprintln!("{}: Overflow occurred while performing {} - {}.", pos1, left_val, right_val);
+                            eprintln!("   {}: Overflow occurred while performing {} - {}.", pos1, left_val, right_val);
                             *error = true;
                         }
                     }
@@ -102,7 +102,7 @@ fn traverse_node(mut node: ASTNode, value: &mut u64, symtable: &mut SymbolTable,
                         }
                         None => {
                             // Overflow
-                            eprintln!("{}: Overflow occurred while performing {} * {}.", pos1, left_val, right_val);
+                            eprintln!("   {}: Overflow occurred while performing {} * {}.", pos1, left_val, right_val);
                             *error = true;
                         }
                     }
@@ -116,7 +116,7 @@ fn traverse_node(mut node: ASTNode, value: &mut u64, symtable: &mut SymbolTable,
                         }
                         None => {
                             // Overflow
-                            eprintln!("{}: Overflow occurred while performing {} / {}.", pos1, left_val, right_val);
+                            eprintln!("   {}: Overflow occurred while performing {} / {}.", pos1, left_val, right_val);
                             *error = true;
                         }
                     }

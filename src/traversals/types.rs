@@ -4,7 +4,7 @@
  * Created:
  *   06 Jan 2022, 09:17:21
  * Last edited:
- *   06 Jan 2022, 16:50:09
+ *   11 Jan 2022, 14:15:01
  * Auto updated?
  *   Yes
  *
@@ -46,7 +46,7 @@ macro_rules! get_child_kind {
 
                 // If the type is undefined, it's never been initialized (ans)
                 if *kind == ValueKind::Undefined {
-                    eprintln!("{}: Identifier '{}' is defined, but not initialized yet.", pos1, identifier);
+                    eprintln!("   {}: Identifier '{}' is defined, but not initialized yet.", pos1, identifier);
                     *$error = true;
                 }
 
@@ -118,7 +118,7 @@ fn traverse_node(mut node: ASTNode, symtable: &mut SymbolTable, error: &mut bool
             // Now decide what to do
             if left_override_kind && right_override_kind && left_kind != right_kind {
                 // Show error message, but take the left
-                eprintln!("{}: Ambigious typing: casted to both {:?} (LHS) and {:?} (RHS); choosing left.", pos1, left_kind, right_kind);
+                eprintln!("   {}: Ambigious typing: casted to both {:?} (LHS) and {:?} (RHS); choosing left.", pos1, left_kind, right_kind);
                 *override_kind = true;
                 *kind = left_kind;
             } else if !left_override_kind && right_override_kind {

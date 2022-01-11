@@ -4,7 +4,7 @@
  * Created:
  *   06 Jan 2022, 14:07:35
  * Last edited:
- *   06 Jan 2022, 16:47:48
+ *   11 Jan 2022, 14:14:54
  * Auto updated?
  *   Yes
  *
@@ -59,7 +59,7 @@ fn traverse_node(mut node: ASTNode, symbol_table: &mut SymbolTable, error: &mut 
         ASTNode::Id { ref identifier, pos1, pos2: _ } => {
             // See if we have seen it
             if !symbol_table.contains_key(identifier) {
-                eprintln!("{}: Unknown identifier '{}'.", pos1, identifier);
+                eprintln!("   {}: Unknown identifier '{}'.", pos1, identifier);
                 *error = true;
             }
         }

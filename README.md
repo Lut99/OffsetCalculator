@@ -153,6 +153,7 @@ Finally, instead of giving an expression, a few special commands can be given as
  - `del <id>`: Deletes the variable with the given identifier.
  - `delall`: Deletes all variables, even 'ans' (resetting it to undefined).
  - `show_vars`: Shows a list of currently loaded variables and their values.
+ - `clear_hist`: Clear the history of the REPL up to that point.
  - `help`: Shows an in-calculator help menu for expressions and commands.
  - `exit`: Exits the REPL.
 Note that for obvious reasons, expressions and commands cannot be mixed.

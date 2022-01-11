@@ -4,7 +4,7 @@
  * Created:
  *   04 Jan 2022, 12:00:03
  * Last edited:
- *   11 Jan 2022, 13:50:35
+ *   11 Jan 2022, 14:14:09
  * Auto updated?
  *   Yes
  *
@@ -728,7 +728,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                             TerminalKind::HELP |
                             TerminalKind::EXIT => {
                                 // Tell the user what happened
-                                eprintln!("{}: Expected identifier, got keyword {}.", token.pos().0, &input[token.pos1 - 1..token.pos2]);
+                                eprintln!("   {}: Expected identifier, got keyword {}.", token.pos().0, &input[token.pos1 - 1..token.pos2]);
                                 stack.remove(stack.len() - 1);
                                 stack.remove(stack.len() - 1);
                                 return String::from("error");
@@ -741,7 +741,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                 }
 
                 // Not what we expected!
-                eprintln!("{}: Missing identifier before assign.", last_token.pos().0);
+                eprintln!("   {}: Missing identifier before assign.", last_token.pos().0);
                 stack.remove(stack.len() - 1);
                 stack.remove(stack.len() - 1);
                 return String::from("error");
@@ -817,7 +817,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                     let token = s.as_any().downcast_ref::<Token>().unwrap();
 
                     // Show that this isn't what we mean
-                    eprintln!("{}: Missing value before {}.", token.pos1, if op == LowBinaryOperator::Plus { "addition" } else { "subtraction" });
+                    eprintln!("   {}: Missing value before {}.", token.pos1, if op == LowBinaryOperator::Plus { "addition" } else { "subtraction" });
                     stack.remove(stack.len() - 1);
                     stack.remove(stack.len() - 1);
                     return String::from("error");
@@ -850,7 +850,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                         
                         // For the rest, throw an error too
                         _ => {
-                            eprintln!("{}: Incompatible symbol '{}' before {}.", node.pos().0, &input[node.pos().0 - 1..node.pos().1], if op == LowBinaryOperator::Plus { "addition" } else { "subtraction" });
+                            eprintln!("   {}: Incompatible symbol '{}' before {}.", node.pos().0, &input[node.pos().0 - 1..node.pos().1], if op == LowBinaryOperator::Plus { "addition" } else { "subtraction" });
                             stack.remove(stack.len() - 1);
                             stack.remove(stack.len() - 1);
                             return String::from("error");
@@ -917,7 +917,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                     let token = s.as_any().downcast_ref::<Token>().unwrap();
 
                     // Show that this isn't what we mean
-                    eprintln!("{}: Missing value before {}.", token.pos1, if op == HighBinaryOperator::Multiply { "multiplication" } else { "division" });
+                    eprintln!("   {}: Missing value before {}.", token.pos1, if op == HighBinaryOperator::Multiply { "multiplication" } else { "division" });
                     stack.remove(stack.len() - 1);
                     stack.remove(stack.len() - 1);
                     return String::from("error");
@@ -950,7 +950,7 @@ fn reduce(input: &str, stack: &mut Vec<Box<dyn Symbol>>, lookahead: &Token) -> S
                         
                         // For the rest, throw an error too
                         _ => {
-                            eprintln!("{}: Incompatible symbol '{}' before {}.", node.pos().0, &input[node.pos().0 - 1..node.pos().1], if op == HighBinaryOperator::Multiply { "multiplication" } else { "division" });
+                            eprintln!("   {}: Incompatible symbol '{}' before {}.", node.pos().0, &input[node.pos().0 - 1..node.pos().1], if op == HighBinaryOperator::Multiply { "multiplication" } else { "division" });
                             stack.remove(stack.len() - 1);
                             stack.remove(stack.len() - 1);
                             return String::from("error");
@@ -1085,7 +1085,7 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
                 }
                 TerminalKind::Undefined(ref err) => {
                     // Encountered an unknown token; try to get more
-                    eprintln!("{}: Encountered unknown token '{}'.", lookahead.pos1, *err);
+                    eprintln!("   {}: Encountered unknown token '{}'.", lookahead.pos1, *err);
                     errored = true;
                 }
                 _ => {
@@ -1112,18 +1112,18 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
             // Switch on its kind
             match token.kind {
                 TerminalKind::LBRACKET => {
-                    eprintln!("{}: Unmatched left bracket.", token.pos1);
+                    eprintln!("   {}: Unmatched left bracket.", token.pos1);
                     errored = true;
                     continue;
                 }
                 TerminalKind::RBRACKET => {
-                    eprintln!("{}: Unmatched right bracket.", token.pos1);
+                    eprintln!("   {}: Unmatched right bracket.", token.pos1);
                     errored = true;
                     continue;
                 }
 
                 _ => {
-                    eprintln!("{}: Unexpected symbol '{}'.", token.pos1, &input[token.pos1 - 1..token.pos2]);
+                    eprintln!("   {}: Unexpected symbol '{}'.", token.pos1, &input[token.pos1 - 1..token.pos2]);
                     errored = true;
                     continue;
                 }
@@ -1138,7 +1138,7 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
                 ASTNode::Expr{ override_kind: _, kind: _, expr: _, pos1: _, pos2: _ } => {
                     // Compain if in command mode
                     if is_cmd {
-                        eprintln!("{}: Cannot give an expression ('{}') in between a command.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
+                        eprintln!("   {}: Cannot give an expression ('{}') in between a command.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
                         errored = true;
                         continue;
                     }
@@ -1147,14 +1147,14 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
                     // Only change modes if it's the first
                     if i == 0 { is_cmd = true; }
                     else {
-                        eprintln!("{}: Cannot give a command ('{}') in between an expression.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
+                        eprintln!("   {}: Cannot give a command ('{}') in between an expression.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
                         errored = true;
                         continue;
                     }
                 }
 
                 _ => {
-                    eprintln!("{}: Unexpected symbol '{}'.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
+                    eprintln!("   {}: Unexpected symbol '{}'.", node.pos().0, &input[node.pos().0 - 1..node.pos().1]);
                     errored = true;
                     continue;
                 }
@@ -1162,7 +1162,7 @@ pub fn parse<'a>(input: &'a str) -> Option<ASTNode> {
         }
     }
     for i in 1..stack.len() {
-        eprintln!("{}: Unexpected symbol '{}'.", stack[i].pos().0, &input[stack[i].pos().0 - 1..stack[i].pos().1]);
+        eprintln!("   {}: Unexpected symbol '{}'.", stack[i].pos().0, &input[stack[i].pos().0 - 1..stack[i].pos().1]);
         errored = true;
     }
 

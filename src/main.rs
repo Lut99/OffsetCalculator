@@ -4,7 +4,7 @@
  * Created:
  *   21 Dec 2021, 15:17:24
  * Last edited:
- *   07 Jan 2022, 12:19:26
+ *   11 Jan 2022, 14:12:56
  * Auto updated?
  *   Yes
  *
@@ -113,7 +113,7 @@ fn main() {
                     let kind = ast::parser::get_kind(&ast);
                     match kind {
                         ValueKind::Decimal => { println!("{}", value); }
-                        ValueKind::Hexadecimal => { println!("{:#x}", value); }
+                        ValueKind::Hexadecimal => { println!("0x{:X}", value); }
                         ValueKind::Binary => { println!("{:#b}", value); }
                         _ => {
                             panic!("Unknown ValueKind {:?} in AST's root node; this should never happen!", kind);
@@ -188,9 +188,9 @@ fn main() {
                             if symtable.contains_key(identifier) {
                                 // Remove it
                                 symtable.remove(identifier);
-                                println!("Delete variable '{}'.\n", identifier);
+                                println!("   Deleted variable '{}'.\n", identifier);
                             } else {
-                                eprintln!("Unknown identifier '{}'; cannot delete it.", identifier);
+                                eprintln!("   Unknown identifier '{}'; cannot delete it.", identifier);
                             }
                             continue;
                         }
@@ -199,12 +199,12 @@ fn main() {
                             symtable.clear();
                             // Reinstate ans
                             symtable.insert(String::from("ans"), (ValueKind::Undefined, 0));
-                            println!("Cleared all variables.\n");
+                            println!("   Cleared all variables.\n");
                             continue;
                         }
                         ASTNode::ShowVars { pos1: _, pos2: _ } => {
                             // Print the symbol table
-                            println!("Currently defined variables:");
+                            println!("   Currently defined variables:");
                             for (identifier, (kind, value)) in symtable.iter() {
                                 println!(" - {}\t\t{:?}, {}", identifier, kind, value);
                             }
@@ -214,18 +214,44 @@ fn main() {
                         ASTNode::ClearHist { pos1: _, pos2: _ } => {
                             // Clear the history
                             rl.clear_history();
-                            println!("Cleared history.\n");
+                            println!("   Cleared history.\n");
                             continue;
                         }
                         ASTNode::Help { pos1: _, pos2: _ } => {
                             // Print the help string
-                            println!("You can simply write any calculation you like, which will then be evaluated.");
-                            println!("There are a few special command keywords:");
-                            println!(" - 'del <id>': Deletes the variable with the given identifier.");
-                            println!(" - 'delall': Deletes all variables, even 'ans' (resetting it to undefined).");
-                            println!(" - 'show_vars': Shows a list of currently loaded variables and their values.");
-                            println!(" - 'help': Shows this menu.");
-                            println!(" - 'exit': Exits the REPL.");
+                            println!("   See help below for either writing expressions or running commands.");
+                            println!();
+                            println!("   Expressions:");
+                            println!("     Expressions in the calculator are written as normal programming language math");
+                            println!("     expressions.");
+                            println!("     You can use the following constants:");
+                            println!("      - A decimal constant (e.g., '42') or a constant prefixed by '0d' (e.g.,");
+                            println!("        '0d42')");
+                            println!("      - A hexadecimal constant prefixed by '0x' (e.g., '0x2A')");
+                            println!("      - A binary constant prefixed by '0b' (e.g., '0b101010')");
+                            println!("     Furthermore, you can also use the following operators (in order of");
+                            println!("     precedence):");
+                            println!("      - <id> = <expr>: Creates a variable with the given ID and sets its value to");
+                            println!("        the given expression.");
+                            println!("      - dec <expr>: Converts the representation of the given expression to");
+                            println!("        decimal.");
+                            println!("      - hex <expr>: Converts the representation of the given expression to");
+                            println!("        hexadecimal.");
+                            println!("      - bin <expr>: Converts the representation of the given expression to");
+                            println!("        binary.");
+                            println!("      - <expr> * <expr>: Multiplication on the given two expressions.");
+                            println!("      - <expr> / <expr>: Division on the given two expressions.");
+                            println!("      - <expr> + <expr>: Addition on the given two expressions.");
+                            println!("      - <expr> - <expr>: Subtraction on the given two expressions.");
+                            println!();
+                            println!("   Commands:");
+                            println!("     There are a few special command keywords:");
+                            println!("      - 'del <id>': Deletes the variable with the given identifier.");
+                            println!("      - 'delall': Deletes all variables, even 'ans' (resetting it to undefined).");
+                            println!("      - 'show_vars': Shows a list of currently loaded variables and their values.");
+                            println!("      - 'clear_hist': Clear the history of the REPL up to that point.");
+                            println!("      - 'help': Shows an in-calculator help menu for expressions and commands.");
+                            println!("      - 'exit': Exits the REPL.");
                             println!();
                             continue;
                         }
@@ -268,7 +294,7 @@ fn main() {
                             // let kind = ast::parser::get_kind(&ast2);
                             match kind {
                                 ValueKind::Decimal => { println!(" = {}", value); }
-                                ValueKind::Hexadecimal => { println!(" = {:#x}", value); }
+                                ValueKind::Hexadecimal => { println!(" = 0x{:X}", value); }
                                 ValueKind::Binary => { println!(" = {:#b}", value); }
                                 _ => {
                                     panic!("Unknown ValueKind {:?} in AST's root node; this should never happen!", kind);
@@ -296,7 +322,7 @@ fn main() {
             },
             Err(err) => {
                 // Other error
-                eprintln!("Couldn't read line: {:?}", err);
+                eprintln!("   Couldn't read line: {:?}", err);
                 std::process::exit(-1);
             }
         }
