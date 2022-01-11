@@ -32,6 +32,7 @@ The three representations supported are:
 ### Operations
 There are several types of operations that are supported by the calculator. Note that every operation works on expressions, and can thus be combined to create complex expressions.
 
+---------
 #### _Arithmetic operations_
 The first type are arithmetic operations. These are:
  - Addition, noted with `+`.
@@ -44,7 +45,7 @@ All of them are left-associative, and are infix between two expressions. For exa
  > 42 - 42 + 42
  = 42
 ```
-Meaning it first computer `42 - 42`, and then computed `0 + 42`.
+Meaning it first computed `42 - 42`, and then `0 + 42`.
 
 Also note that multiplication and division have a higher precedence than addition and subtraction; consider the following evaluation:
 ```
@@ -59,6 +60,7 @@ Note, however, that both associativity and precedence can be overwritten by usin
 
 Since the calculator tries to deduce the output format from the given formats, its important to note that for all arithmetic expressions, the _leftmost_ format is taken when they differ (unless a conversion operation is used; see the [next](#Conversion-operations) section).
 
+---------
 #### _Conversion operations_
 The second type of operations are format conversion operators. These can convert one representation into another. There are three of them:
  - `dec`: Converts the given expression to a decimal representation.
@@ -106,6 +108,7 @@ Finally, also note that variables take on the representation used by their value
  = 0x54
 ```
 
+---------
 #### _ans_
 From the start, a special variable `ans` is defined:
 ```
