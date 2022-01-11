@@ -137,7 +137,16 @@ This allows for workflows where a value has to be updated all the time and the i
 
 ### Precedence
 With all the operators and values explained, we can now put their precedence in a table:
-
+| Precedence level | Operator | Description                                          | Associativity |
+|------------------|----------|------------------------------------------------------|---------------|
+|1                 | =        | Assignment of a variable.                            | Right-to-left |
+|2                 | dec      | Converts the given expression to decimal format.     | Right-to-left |
+|2                 | hex      | Converts the given expression to hexadecimal format. | Right-to-left |
+|2                 | bin      | Converts the given expression to binary format.      | Right-to-left |
+|3                 | *        | Multiplication.                                      | Left-to-right |
+|3                 | /        | Division.                                            | Left-to-right |
+|4                 | +        | Addition.                                            | Left-to-right |
+|4                 | -        | Subtraction.                                         | Left-to-right |
 
 ### Commands
 Finally, instead of giving an expression, a few special commands can be given as well:
